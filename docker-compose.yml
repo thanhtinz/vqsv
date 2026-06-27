@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vqsv-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vqsv
+      POSTGRES_USER: vqsv
+      POSTGRES_PASSWORD: vqsv123
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vqsv"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vqsv-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: vqsv-server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/vqsv
+      DB_USER: vqsv
+      DB_PASS: vqsv123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      HTTP_PORT: 8080
+      TCP_PORT: 9090
+      JWT_SECRET: change-this-in-production-please
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+
+volumes:
+  pgdata:

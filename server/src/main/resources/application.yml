@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: vqsv-server
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/vqsv}
+    username: ${DB_USER:vqsv}
+    password: ${DB_PASS:vqsv123}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASS:}
+
+server:
+  port: ${HTTP_PORT:8080}
+
+vqsv:
+  jwt:
+    secret: ${JWT_SECRET:vqsv-super-secret-key-change-in-production}
+    expiration-ms: 86400000
+  tcp:
+    port: ${TCP_PORT:9090}
+  game:
+    tick-rate-ms: 100
+    max-players-per-map: 50
+    pet-max-level: 100
+    base-exp-per-level: 100
+
+logging:
+  level:
+    com.vqsv: DEBUG
+    org.springframework.web.socket: INFO
