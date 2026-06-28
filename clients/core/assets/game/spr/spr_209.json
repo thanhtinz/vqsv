@@ -1,0 +1,1 @@
+{"modules": [{"img": 0, "x": 182, "y": 119, "w": 18, "h": 23}], "frames": [[{"module": 0, "dx": -9, "dy": -23, "flip": 0}]], "anims": [[{"delay": 1, "frame": 0}]], "hitboxes": null, "bodyboxes": [[[-11, -25, 21, 27]]], "bytes_consumed": 56, "bytes_total": 56, "spr_file_id": 209, "images": [220]}
