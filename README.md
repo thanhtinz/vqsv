@@ -85,7 +85,6 @@ VQSV Online chạy trên nhiều nền tảng, tất cả cùng kết nối về
 
 - 📘 **HƯỚNG DẪN ĐẦY ĐỦ (A→Z): cài đặt, cấu hình, đấu domain, build client, thêm
   map/npc/mob/item/tính năng** → [`docs/HUONG-DAN-DAY-DU.md`](docs/HUONG-DAN-DAY-DU.md)
-- **Tóm tắt chạy local:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
 - **Build client từng nền tảng:** [`clients/README.md`](clients/README.md)
 - **Hướng dẫn triển khai server lên VPS:** [`deploy/VPS_DEPLOY.md`](deploy/VPS_DEPLOY.md)
 - **Tài liệu kỹ thuật:**

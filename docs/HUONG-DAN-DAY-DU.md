@@ -1,418 +1,374 @@
-# VQSV — Hướng dẫn đầy đủ (A → Z)
+# VQSV — Hướng dẫn đầy đủ (cho người mới bắt đầu)
 
-Tài liệu thực hành: cài công cụ, chạy local, cấu hình, đấu domain, build client,
-và **thêm map / NPC / mob / item / tính năng**. Mọi lệnh và đường dẫn ở đây là
-thật trong repo này.
-
-Mục lục:
-1. [Công cụ cần cài](#1-công-cụ-cần-cài)
-2. [Lấy mã nguồn & chạy thử local](#2-lấy-mã-nguồn--chạy-thử-local)
-3. [Cấu hình (config) mọi thành phần](#3-cấu-hình-config-mọi-thành-phần)
-4. [Đấu domain & deploy production](#4-đấu-domain--deploy-production)
-5. [Build client lên từng nền tảng](#5-build-client-lên-từng-nền-tảng)
-6. [Thêm nội dung game (map/mob/npc/item/...)](#6-thêm-nội-dung-game)
-7. [Thêm tính năng mới (ví dụ thật)](#7-thêm-tính-năng-mới)
-8. [Sprite ID & asset](#8-sprite-id--asset)
-9. [Lệnh hữu ích & xử lý lỗi](#9-lệnh-hữu-ích--xử-lý-lỗi)
+> Đọc lần đầu thấy nhiều? Đừng lo. Cứ làm **đúng theo thứ tự** trong tài liệu này,
+> mỗi bước đều có "kết quả mong đợi" để bạn biết mình làm đúng chưa.
 
 ---
 
-## 1. Công cụ cần cài
+## 0. Hệ thống VQSV là gì? (giải thích dễ hiểu)
 
-| Công cụ | Phiên bản | Dùng để làm gì | Cài như nào |
-|---------|-----------|----------------|-------------|
-| **JDK** | 17+ (khuyến nghị 21) | Build & chạy server + client Android/PC | `apt install openjdk-21-jdk` (Linux) / [Adoptium](https://adoptium.net) (Win/Mac) |
-| **Docker** + Compose | mới nhất | Chạy PostgreSQL + Redis, deploy | `curl -fsSL https://get.docker.com \| sh` |
-| **Node.js** | 20+ | Build website + trang admin (Next.js) | [nodejs.org](https://nodejs.org) hoặc `nvm install 20` |
-| **Gradle** | — | KHÔNG cần cài, đã có `./gradlew` sẵn | (tự tải khi chạy lần đầu) |
-| **Flutter** | 3.19+ | Chỉ khi build client iOS | [flutter.dev](https://docs.flutter.dev/get-started/install) |
-| **Apache Ant + WTK 2.5** | — | Chỉ khi build client J2ME (legacy) | `apt install ant` + Sun WTK |
-| **Git** | — | Tải/đẩy mã nguồn | `apt install git` |
+Game này giống như **một quán ăn online**:
 
-> Kiểm tra nhanh: `java -version` (>=17), `node -v` (>=20), `docker -v`, `git --version`.
+| Thành phần | Giống cái gì | Việc của nó |
+|------------|--------------|-------------|
+| **Server** | Cái bếp + người quản lý quán | Xử lý mọi thứ: đăng nhập, đánh nhau, lưu tiến trình. Chạy trên một máy chủ. |
+| **Database** (PostgreSQL) | Cuốn sổ ghi chép của quán | Lưu tài khoản, sủng vật, vật phẩm... Không mất khi tắt máy. |
+| **Redis** | Bảng nhớ tạm dán trên tường | Lưu phiên đăng nhập, dữ liệu tạm — cho nhanh. |
+| **Client** | Khách tới quán | Cái mà người chơi cầm: app điện thoại / game PC. Nói chuyện với Server. |
+| **Website** | Trang giới thiệu quán | Cho người chơi xem tin tức, bảng xếp hạng, nạp thẻ. |
+| **Trang Admin** | Phòng quản lý | Cho bạn (chủ game) thêm map, vật phẩm, xem người chơi... |
+| **Domain** | Địa chỉ nhà của quán | Ví dụ `play.tengame.com` — để người chơi tìm tới server. |
+
+Tất cả nằm trong một thư mục mã nguồn. Bạn sẽ: **cài vài công cụ → bật server lên →
+mở client/website → (tuỳ chọn) đưa lên internet bằng domain**.
+
+### Thuật ngữ hay gặp (đọc lướt cũng được)
+
+- **Terminal / Command line**: cửa sổ gõ lệnh. Trên Windows là **PowerShell**, trên
+  Mac/Linux là **Terminal**. Mọi lệnh `như thế này` đều gõ ở đây.
+- **Port (cổng)**: như số phòng. Server mở cổng `8080` (web/API) và `9090` (game).
+- **Build**: "đóng gói" mã nguồn thành app chạy được (file `.apk`, `.jar`...).
+- **Migration**: file chứa lệnh tạo/sửa bảng trong database. Server tự chạy khi khởi động.
+- **Environment variable (biến môi trường)**: ô cấu hình truyền vào lúc chạy, ví dụ
+  mật khẩu database — để không phải ghi cứng trong code.
 
 ---
 
-## 2. Lấy mã nguồn & chạy thử local
+## 1. Cài công cụ (làm 1 lần)
 
+Cài các thứ sau (chỉ cài cái bạn cần):
+
+| Công cụ | Bắt buộc? | Để làm gì | Cài ở đâu |
+|---------|-----------|-----------|-----------|
+| **Java (JDK) 17+** | ✅ Có | Chạy server & build game | [adoptium.net](https://adoptium.net) → tải "Temurin 21" |
+| **Docker Desktop** | ✅ Có | Chạy database + Redis dễ dàng | [docker.com](https://www.docker.com/products/docker-desktop/) |
+| **Node.js 20+** | ✅ Có | Chạy website + trang admin | [nodejs.org](https://nodejs.org) → bản "LTS" |
+| **Git** | ✅ Có | Tải mã nguồn về | [git-scm.com](https://git-scm.com) |
+| **Flutter** | ❌ Chỉ khi làm app iOS | Build client iOS | [docs.flutter.dev](https://docs.flutter.dev/get-started/install) |
+
+> **Gradle KHÔNG cần cài** — dự án đã có sẵn lệnh `./gradlew` tự lo.
+
+**Kiểm tra đã cài đúng chưa** — mở Terminal/PowerShell gõ từng dòng:
+```bash
+java -version      # phải hiện 17 trở lên
+node -v            # phải hiện v20 trở lên
+docker -v          # phải hiện số phiên bản
+git --version      # phải hiện số phiên bản
+```
+*Kết quả mong đợi:* mỗi lệnh in ra một dòng phiên bản. Nếu báo "not found / không tìm
+thấy" → cài lại công cụ đó rồi mở Terminal mới.
+
+---
+
+## 2. Chạy lần đầu (làm đúng thứ tự này)
+
+### Bước 1 — Tải mã nguồn về
 ```bash
 git clone https://github.com/thanhtinz/vqsv.git
 cd vqsv
 ```
+*Kết quả:* có thư mục `vqsv`, bạn đang đứng trong đó.
 
-**Bước 1 — Hạ tầng (PostgreSQL + Redis):**
+### Bước 2 — Bật Database + Redis
+Mở **Docker Desktop** trước (đợi nó báo "running"), rồi gõ:
 ```bash
 docker compose up -d db redis
 ```
-- PostgreSQL: `localhost:5432`, database `vqsv`, user `vqsv`, mật khẩu `vqsv123`.
-- Redis: `localhost:6379`.
+*Kết quả mong đợi:* `docker compose ps` thấy `vqsv-db` và `vqsv-redis` đều `healthy`.
+- Database PostgreSQL: chạy ở `localhost:5432` (tên db `vqsv`, user `vqsv`, mật khẩu `vqsv123`).
 
-**Bước 2 — Server (Spring Boot):**
+### Bước 3 — Bật Server
 ```bash
 cd server
 ./gradlew bootRun
 ```
-- REST API + WebSocket: `http://localhost:8080`
-- Cổng TCP cho client game (J2ME/LibGDX): `9090`
-- Flyway tự chạy migration tạo bảng + seed dữ liệu khi khởi động.
+(Trên Windows dùng `gradlew bootRun`, không có `./`.)
 
-Kiểm tra: `curl http://localhost:8080/actuator/health` → `{"status":"UP"}`.
+Lần đầu sẽ tải thư viện, hơi lâu (vài phút). *Kết quả mong đợi:* dòng cuối hiện
+`Started VqsvApplicationKt`. Server đang chạy — **cứ để cửa sổ này mở**.
 
-**Bước 3 — Website người chơi:**
+Kiểm tra ở cửa sổ Terminal **khác**:
 ```bash
-cd web && npm ci && npm run dev      # http://localhost:3000
+curl http://localhost:8080/actuator/health
+```
+*Kết quả mong đợi:* `{"status":"UP"}`.
+
+### Bước 4 — (Tuỳ chọn) Bật Website
+Mở Terminal mới:
+```bash
+cd vqsv/web
+npm ci            # cài thư viện (làm 1 lần)
+npm run dev       # mở http://localhost:3000
 ```
 
-**Bước 4 — Trang quản trị:**
+### Bước 5 — (Tuỳ chọn) Bật Trang Admin
 ```bash
-cd admin && npm ci && npm run dev    # http://localhost:3001
+cd vqsv/admin
+npm ci
+npm run dev       # mở http://localhost:3001
 ```
 
-**Bước 5 — Client game (PC):**
+### Bước 6 — (Tuỳ chọn) Chạy thử Game trên PC
 ```bash
-cd clients && ./gradlew :desktop:run
+cd vqsv/clients
+./gradlew :desktop:run
 ```
+*Kết quả mong đợi:* cửa sổ game hiện ra, vào được màn đăng nhập.
 
-> Muốn chạy tất cả bằng Docker một phát: `docker compose up -d --build` (db + redis + server).
+> 🎉 Tới đây bạn đã có cả server + game + web + admin chạy trên máy mình.
 
 ---
 
-## 3. Cấu hình (config) mọi thành phần
+## 3. Cấu hình (chỉnh cho hợp ý bạn)
 
-### 3.1. Server — biến môi trường
+### 3.1. Đổi cấu hình Server
+Server nhận cấu hình qua **biến môi trường** (không cần sửa code). Ví dụ chạy server
+kèm tạo tài khoản admin:
+```bash
+ADMIN_USERNAME=admin ADMIN_PASSWORD=MatKhauManh123 ./gradlew bootRun
+```
+*(Windows PowerShell:* `$env:ADMIN_USERNAME="admin"; $env:ADMIN_PASSWORD="MatKhauManh123"; ./gradlew bootRun`)*
 
-Server đọc cấu hình từ biến môi trường (mặc định trong
-`server/src/main/resources/application.yml`):
+Các cấu hình hay dùng:
 
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
-| `DB_URL` | `jdbc:postgresql://localhost:5432/vqsv` | Chuỗi kết nối PostgreSQL |
-| `DB_USER` / `DB_PASS` | `vqsv` / `vqsv123` | Tài khoản DB |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/vqsv` | Địa chỉ database |
+| `DB_USER` / `DB_PASS` | `vqsv` / `vqsv123` | Tài khoản database |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis |
-| `REDIS_PASS` | (trống) | Mật khẩu Redis |
-| `HTTP_PORT` | `8080` | Cổng REST/WebSocket |
-| `TCP_PORT` | `9090` | Cổng game nhị phân |
-| `JWT_SECRET` | (đổi ở production!) | Khóa ký JWT, **>= 32 ký tự** |
-| `JWT_EXPIRATION_MS` | `86400000` | Hạn token (24h) |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | (trống) | Tạo/nâng quyền tài khoản admin lúc khởi động |
+| `HTTP_PORT` | `8080` | Cổng web/API |
+| `TCP_PORT` | `9090` | Cổng game |
+| `JWT_SECRET` | (nên đổi khi lên mạng!) | Khoá bảo mật đăng nhập, **>= 32 ký tự** |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | (trống) | Tạo/nâng quyền tài khoản admin |
 
-Cách đặt khi chạy local:
+### 3.2. Tạo & dùng tài khoản Admin
+1. Chạy server có đặt `ADMIN_USERNAME` + `ADMIN_PASSWORD` như trên.
+2. Mở `http://localhost:3001`, đăng nhập bằng đúng tên/mật khẩu đó.
+*Kết quả:* vào được bảng điều khiển admin.
+
+### 3.3. Cho Website/Admin biết server ở đâu
+Tạo file `web/.env.local` (và `admin/.env.local`) với 1 dòng:
 ```bash
-DB_URL=jdbc:postgresql://localhost:5432/vqsv \
-ADMIN_USERNAME=admin ADMIN_PASSWORD=MatKhauManh123 \
-./gradlew bootRun
+NEXT_PUBLIC_API_BASE=http://localhost:8080
+# Khi lên mạng đổi thành: https://play.tengame.com
 ```
 
-### 3.2. Tạo tài khoản admin
+### 3.4. Cho Client (game) biết server ở đâu
+Mặc định game nối `localhost`. Khi muốn nối server thật, sửa địa chỉ trong file:
 
-1. Đặt `ADMIN_USERNAME` + `ADMIN_PASSWORD` rồi khởi động server →
-   `AdminBootstrap` tự tạo tài khoản (hoặc nâng tài khoản sẵn có lên quyền `ADMIN`).
-2. Mở trang admin (`http://localhost:3001`), đăng nhập bằng đúng user/mật khẩu đó.
-
-### 3.3. Website & Admin — trỏ về server
-
-Sửa biến `NEXT_PUBLIC_API_BASE` (xem `web/.env.example`, `admin/.env.example`):
-```bash
-# web/.env.local  và  admin/.env.local
-NEXT_PUBLIC_API_BASE=http://localhost:8080        # local
-# NEXT_PUBLIC_API_BASE=https://play.tengame.com   # production
-```
-
-### 3.4. Client game — trỏ về server
-
-Mặc định client nối `localhost`. Đổi host server tại:
-
-| Client | File | Sửa chỗ |
-|--------|------|---------|
-| PC | `clients/desktop/src/main/kotlin/com/vqsv/desktop/DesktopLauncher.kt` | `VqsvGame("localhost")` |
-| Android | `clients/android/src/main/kotlin/com/vqsv/android/MainActivity.kt` | tham số host của `VqsvGame(...)` |
-| iOS (Flutter) | `clients/ios/lib/services/api_service.dart`, `tcp_service.dart` | hằng host/baseUrl |
-| J2ME | `clients/j2me/src/com/vqsv/j2me/screen/LoginScreen.java` | `SERVER_HOST` |
+| Game trên | Sửa file này | Tìm dòng |
+|-----------|--------------|----------|
+| PC | `clients/desktop/.../DesktopLauncher.kt` | `VqsvGame("localhost")` → đổi `localhost` |
+| Android | `clients/android/.../MainActivity.kt` | tham số host của `VqsvGame(...)` |
+| iOS (Flutter) | `clients/ios/lib/services/api_service.dart`, `tcp_service.dart` | địa chỉ host |
+| J2ME | `clients/j2me/.../LoginScreen.java` | `SERVER_HOST` |
 
 ---
 
-## 4. Đấu domain & deploy production
+## 4. Đưa game lên internet (đấu domain & deploy)
 
-Chi tiết đầy đủ ở [`deploy/VPS_DEPLOY.md`](../deploy/VPS_DEPLOY.md). Tóm tắt:
+Bạn cần: **1 VPS** (máy chủ thuê ngoài) + **1 domain** (tên miền đã mua).
+Hướng dẫn chi tiết: [`deploy/VPS_DEPLOY.md`](../deploy/VPS_DEPLOY.md). Tóm tắt 4 bước:
 
-**Bước 1 — Trỏ domain (DNS):** tạo 2 bản ghi **A record** về IP VPS:
+**Bước 1 — Trỏ domain về VPS (làm ở trang quản lý tên miền):** tạo 2 bản ghi **A**:
 ```
-play.tengame.com        A   <IP_VPS>     # website + API
-admin.play.tengame.com  A   <IP_VPS>     # trang admin
+play.tengame.com        →  <địa chỉ IP của VPS>     (website + game)
+admin.play.tengame.com  →  <địa chỉ IP của VPS>     (trang admin)
 ```
+*(thay `tengame.com` bằng domain của bạn)*
 
-**Bước 2 — Cấu hình secret trên VPS:**
+**Bước 2 — Trên VPS, lấy mã nguồn rồi tạo cấu hình bí mật:**
 ```bash
+git clone https://github.com/thanhtinz/vqsv.git && cd vqsv
 cp .env.example .env
-./scripts/gen-secrets.sh          # tự sinh mật khẩu DB/Redis/JWT
-nano .env                         # đặt PUBLIC_DOMAIN và ACME_EMAIL
+./scripts/gen-secrets.sh     # tự tạo mật khẩu database/redis/JWT mạnh
+nano .env                    # điền PUBLIC_DOMAIN và ACME_EMAIL của bạn
 ```
 
-**Bước 3 — Mở tường lửa:** cổng 22, 80, 443, 9090.
+**Bước 3 — Mở tường lửa** cho các cổng: `22` (SSH), `80`, `443` (web), `9090` (game).
 
 **Bước 4 — Chạy:**
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
-Caddy tự xin chứng chỉ HTTPS. Sau đó:
-- `https://play.tengame.com` → website + API (`/api/*`, `/ws`)
-- `https://admin.play.tengame.com` → admin
-- `play.tengame.com:9090` → cổng game (client trỏ host này)
+*Kết quả mong đợi:* sau ít phút, vào `https://play.tengame.com` thấy website (đã có
+HTTPS tự động). Client game thì trỏ host `play.tengame.com` cổng `9090`.
 
-**Cập nhật về sau:** `git pull && docker compose -f docker-compose.prod.yml up -d --build`.
+**Cập nhật game sau này:**
+```bash
+git pull && docker compose -f docker-compose.prod.yml up -d --build
+```
 
 ---
 
-## 5. Build client lên từng nền tảng
+## 5. Đóng gói game cho người chơi (build client)
 
-Tất cả lệnh chạy trong thư mục `clients/`. Asset game đã nằm sẵn trong
-`clients/core/src/main/resources/game/` nên không cần thao tác gì thêm.
+Chạy trong thư mục `clients/`. Asset (hình ảnh, map) đã nằm sẵn trong mã nguồn, không
+cần làm gì thêm. **Nhớ đổi host server (mục 3.4) trước khi build bản phát hành.**
 
-### PC (Windows / macOS / Linux)
-```bash
-cd clients
-./gradlew :desktop:run                       # chạy thử
-./gradlew :desktop:fatJar                     # đóng gói chạy độc lập
-java -jar desktop/build/libs/desktop-all.jar
-```
+| Nền tảng | Lệnh | Ra file gì |
+|----------|------|-----------|
+| **PC** | `./gradlew :desktop:fatJar` | `desktop/build/libs/desktop-all.jar` (chạy: `java -jar ...`) |
+| **Android** | `./gradlew :android:assembleDebug` | `android/build/outputs/apk/debug/android-debug.apk` |
+| **iOS** | `cd ios && flutter build ipa` | bản cài iOS |
+| **J2ME** | `cd j2me && ant build` | `dist/vqsv.jar` |
 
-### Android (APK)
-Cần Android SDK (đặt `ANDROID_HOME` hoặc `clients/local.properties`).
-```bash
-cd clients
-./gradlew :android:assembleDebug
-# Kết quả: android/build/outputs/apk/debug/android-debug.apk
-adb install android/build/outputs/apk/debug/android-debug.apk
-```
-
-### iOS / Android (Flutter)
-```bash
-cd clients/ios
-flutter pub get
-flutter run            # chạy trên máy ảo/thiết bị
-flutter build ipa      # bản iOS phát hành
-flutter build apk      # bản Android phát hành
-```
-
-### J2ME (legacy)
-```bash
-cd clients/j2me
-ant build              # tạo dist/vqsv.jar
-```
-
-> Trước khi build bản phát hành, nhớ đổi host server (mục 3.4) sang domain thật.
+> Android cần cài Android SDK. iOS cần máy Mac + Flutter.
 
 ---
 
-## 6. Thêm nội dung game
+## 6. Thêm nội dung game (map, mob, NPC, vật phẩm...)
 
-Có **2 cách**, dùng cách nào cũng được:
+Có **2 cách**. Người mới nên dùng **Cách A**.
 
-- **Cách A — Trang Admin (khuyên dùng, không cần code):** vào `http://localhost:3001`,
-  mục tương ứng, bấm "Tạo", điền form, Lưu. Có hiệu lực ngay (không cần khởi động lại).
-- **Cách B — SQL migration (để seed cố định, lên git):** thêm file
-  `server/src/main/resources/db/migration/V{n+1}__ten_mo_ta.sql` rồi khởi động lại
-  server → Flyway tự chạy. **Tuyệt đối không sửa file migration cũ** — luôn tạo số mới.
+> **Cách A — Trang Admin (dễ, không cần code):** mở `http://localhost:3001`, vào mục
+> tương ứng, bấm nút **"Tạo"**, điền form, bấm **"Lưu"**. Có hiệu lực ngay.
+>
+> **Cách B — Viết file SQL (để lưu cố định vào mã nguồn):** tạo file mới
+> `server/src/main/resources/db/migration/V{số kế tiếp}__mo_ta.sql` rồi khởi động lại
+> server. **Không bao giờ sửa file SQL cũ — luôn tạo số mới** (V6, V7, V8...).
 
-Tham chiếu nhanh bảng ↔ trang admin ↔ endpoint:
+Bảng tra cứu (mục Admin ↔ bảng database):
 
-| Nội dung | Bảng | Trang admin | API |
-|----------|------|-------------|-----|
-| Bản đồ | `maps` | Game ▸ Bản đồ | `/api/admin/game/maps` |
-| Mẫu sủng vật/quái | `pet_templates` | Game ▸ Sủng vật | `/api/admin/game/pets` |
-| Quái hoang dã (spawn) | `map_wild_pets` | Game ▸ Wild Pets | `/api/admin/game/wild-pets` |
-| NPC trên bản đồ | `npcs` | Game ▸ NPC | `/api/admin/game/npcs` |
-| Trainer/Boss (đối thủ) | `npc_enemy_templates` | Game ▸ Enemies | `/api/admin/game/enemies` |
-| Vật phẩm | `items` | Game ▸ Items | `/api/admin/game/items` |
-| Cửa hàng | `shop_listings` | Game ▸ Shop | `/api/admin/game/shop` |
-| Cổng dịch chuyển | `map_warps` | Game ▸ Warps | `/api/admin/game/warps` |
+| Muốn thêm | Vào Admin mục | Bảng |
+|-----------|---------------|------|
+| Bản đồ | Bản đồ | `maps` |
+| Mob / sủng vật (mẫu) | Sủng vật | `pet_templates` |
+| Cho mob xuất hiện trên map | Wild Pets | `map_wild_pets` |
+| NPC đứng trên map | NPC | `npcs` |
+| Đối thủ Trainer/Boss | Enemies | `npc_enemy_templates` |
+| Vật phẩm | Items | `items` |
+| Bán đồ trong cửa hàng | Shop | `shop_listings` |
+| Cổng dịch chuyển | Warps | `map_warps` |
+
+Dưới đây ví dụ bằng **Cách B (SQL)** — ai dùng Admin thì điền đúng các ô tương ứng.
 
 ### 6.1. Thêm một BẢN ĐỒ
-
-Cột: `name, width, height, tileset_id, bgm_id, min_level, is_pvp`.
-
-SQL:
+Ô cần điền: tên, rộng, cao, tileset, nhạc nền, cấp tối thiểu, cho PvP không.
 ```sql
--- V6__them_ban_do_moi.sql
-INSERT INTO maps (name, width, height, tileset_id, bgm_id, min_level, is_pvp) VALUES
-  ('Hang Pha Lê', 30, 30, 4, 4, 40, FALSE);
+INSERT INTO maps (name, width, height, tileset_id, bgm_id, min_level, is_pvp)
+VALUES ('Hang Pha Lê', 30, 30, 4, 4, 40, FALSE);
 ```
-Hoặc Admin ▸ Bản đồ ▸ Tạo. Ghi nhớ `id` map vừa tạo để dùng cho mob/npc/warp.
+Ghi nhớ **id** của map vừa tạo (ví dụ `7`) để dùng cho mob/npc bên dưới.
 
-### 6.2. Thêm một MOB (quái) và cho nó xuất hiện
-
-Mob gồm 2 phần: **mẫu** (`pet_templates`) + **điểm spawn trên map** (`map_wild_pets`).
-
-1. Tạo mẫu sủng vật (cột chính: `name, sprite_id, element, base_hp, base_atk,
-   base_def, base_spd, catch_rate, evolve_into, evolve_lv`):
+### 6.2. Thêm một MOB (quái) + cho nó xuất hiện
+Mob gồm **2 phần**: tạo *mẫu sủng vật*, rồi *cho nó spawn trên map*.
 ```sql
+-- (1) Mẫu sủng vật
 INSERT INTO pet_templates (name, sprite_id, element, base_hp, base_atk, base_def, base_spd, catch_rate, evolve_into, evolve_lv)
 VALUES ('Rồng Pha Lê', 50, 'WATER', 120, 18, 12, 10, 25, NULL, NULL);
--- lấy id vừa tạo, ví dụ = 13
-```
-2. Cho nó spawn trên map (cột: `map_id, template_id, min_level, max_level, spawn_rate`):
-```sql
-INSERT INTO map_wild_pets (map_id, template_id, min_level, max_level, spawn_rate)
-VALUES (7, 13, 38, 45, 20);   -- map 7, mẫu 13, cấp 38-45, tỉ lệ gặp 20
-```
-Khi người chơi đi trên map đó sẽ ngẫu nhiên gặp mob này.
+-- giả sử mẫu này có id = 13
 
-> `element` hợp lệ: `WOOD, EARTH, WATER, FIRE, GHOST, WIND, ELECTRIC` (alias cũ: `LIGHT`→ELECTRIC, `DARK`→GHOST). Bảng tương khắc xem `docs/ORIGINAL-MECHANICS.md`.
+-- (2) Cho nó xuất hiện trên map 7, cấp 38-45, tỉ lệ gặp 20
+INSERT INTO map_wild_pets (map_id, template_id, min_level, max_level, spawn_rate)
+VALUES (7, 13, 38, 45, 20);
+```
+`element` chọn 1 trong: `WOOD, EARTH, WATER, FIRE, GHOST, WIND, ELECTRIC`.
 
 ### 6.3. Thêm một NPC
-
-Cột: `name, sprite_id, npc_type, map_id, pos_x, pos_y, dialog_key`.
-`npc_type`: `DIALOG` (hội thoại), `SHOP` (cửa hàng), `BATTLE_TRAINER` (đấu).
+`npc_type`: `DIALOG` (nói chuyện), `SHOP` (mở cửa hàng), `BATTLE_TRAINER` (đấu).
 ```sql
 INSERT INTO npcs (name, sprite_id, npc_type, map_id, pos_x, pos_y, dialog_key)
 VALUES ('Ông Lão Bí Ẩn', 9, 'DIALOG', 7, 5, 8, 'lao_bi_an');
 ```
-Hoặc Admin ▸ NPC ▸ Tạo.
 
 ### 6.4. Thêm một TRAINER (NPC đấu được)
-
-Trainer = 1 NPC `BATTLE_TRAINER` + 1 đối thủ trong `npc_enemy_templates`, **liên kết
-bằng `enemy_template_id`**. Người chơi đi tới cạnh NPC, bấm `G` để giao đấu.
-
+Trainer = 1 NPC loại `BATTLE_TRAINER` + 1 đối thủ, nối với nhau bằng `enemy_template_id`.
+Trong game, người chơi đi tới **cạnh** NPC rồi bấm **`G`** để đấu.
 ```sql
--- 1) Đối thủ (cột: name, sprite_id, level, hp, atk, def, spd, exp_reward, gold_reward, map_id)
+-- (1) Đối thủ
 INSERT INTO npc_enemy_templates (name, sprite_id, level, hp, atk, def, spd, exp_reward, gold_reward, map_id)
 VALUES ('Cao Thủ Pha Lê', 12, 42, 900, 100, 55, 35, 1500, 1000, 7);
 -- giả sử id = 13
 
--- 2) NPC trainer trên map, trỏ tới đối thủ trên
+-- (2) NPC trainer trỏ tới đối thủ trên
 INSERT INTO npcs (name, sprite_id, npc_type, map_id, pos_x, pos_y, enemy_template_id)
 VALUES ('Cao Thủ Pha Lê', 12, 'BATTLE_TRAINER', 7, 10, 10, 13);
 ```
-Thắng trận sẽ thưởng đúng `exp_reward` / `gold_reward`. (Xem mẫu thật ở
-`V4__seed_npc_trainers.sql` và `V5__link_trainer_npcs.sql`.)
+(Mẫu thật xem `V4__seed_npc_trainers.sql` + `V5__link_trainer_npcs.sql`.)
 
-### 6.5. Thêm một VẬT PHẨM và bán trong shop
-
-Cột item: `name, item_type, effect_val, icon_id, description`.
-`item_type` server hiểu: `CATCH_BALL` (tất bắt thú, `effect_val` = lực bắt; >=100 = chắc chắn),
-`MEDICINE` (hồi máu, `effect_val` = HP hồi), `LEVEL_UP`, `GOLD_PACK`.
+### 6.5. Thêm VẬT PHẨM + bán trong cửa hàng
+`item_type` server hiểu: `CATCH_BALL` (tất bắt thú, `effect_val`=lực bắt, ≥100 = chắc
+chắn), `MEDICINE` (hồi máu, `effect_val`=HP hồi), `LEVEL_UP`, `GOLD_PACK`.
 ```sql
--- 1) Vật phẩm
+-- (1) Vật phẩm
 INSERT INTO items (name, item_type, effect_val, icon_id, description)
 VALUES ('Tất Kim Cương', 'CATCH_BALL', 90, 4, 'Tỉ lệ bắt cực cao');
 -- giả sử id = 12
 
--- 2) Bán trong cửa hàng (cột: item_id, price_gold, price_medal, sort_order)
+-- (2) Bán 3000 vàng trong shop (để price_medal nếu muốn bán bằng huy chương)
 INSERT INTO shop_listings (item_id, price_gold, price_medal, sort_order)
-VALUES (12, 3000, NULL, 5);     -- bán 3000 vàng; để price_medal nếu bán bằng huy chương
+VALUES (12, 3000, NULL, 5);
 ```
 
-### 6.6. Thêm CỔNG DỊCH CHUYỂN (warp) giữa 2 map
-
-Cột: `from_map, from_x, from_y, to_map, to_x, to_y`.
+### 6.6. Thêm CỔNG DỊCH CHUYỂN giữa 2 map
 ```sql
+-- Đứng ô (19,10) ở map 1 sẽ sang map 7 tại ô (0,10)
 INSERT INTO map_warps (from_map, from_x, from_y, to_map, to_x, to_y)
-VALUES (1, 19, 10, 7, 0, 10);   -- đứng ô (19,10) map 1 → sang map 7 ô (0,10)
+VALUES (1, 19, 10, 7, 0, 10);
 ```
+
+> **Lưu ý:** sửa bằng **SQL** thì phải khởi động lại server; sửa bằng **Admin** thì có
+> hiệu lực ngay (bấm Lưu rồi tải lại trang).
 
 ---
 
-## 7. Thêm tính năng mới
+## 7. Thêm tính năng mới (dành cho người biết code)
 
-Kiến trúc server (Spring Boot + Kotlin). Một tính năng thường đi qua các tầng:
+Một tính năng thường đi qua các tầng trong `server/src/main/kotlin/com/vqsv/`:
 
 ```
-entity/ (bảng)  →  repository/ (truy vấn)  →  migration (SQL tạo bảng)
-        ↘
-         service / game/ (logic)  →  controller/ (REST)  HOẶC  network/TcpGateway (giao thức game)
-                                                   ↘
-                                                    client (Op + TcpClient + screen)  /  web + admin
+entity/      (định nghĩa bảng)
+repository/   (truy vấn database)
+migration     (file SQL tạo bảng)
+service/ game/ (logic: tính toán, luật chơi)
+controller/   (mở API cho web/admin)   HOẶC   network/TcpGateway.kt (lệnh trong game)
+        ↓
+client (core/net/Op.kt + TcpClient.kt + screen/)   /   web + admin
 ```
 
-### Ví dụ thật: tính năng "Đấu NPC Trainer" đã làm trong repo
+**Ví dụ có thật trong repo — tính năng "Đấu NPC Trainer":** muốn làm tính năng tương tự,
+xem đúng các file sau để bắt chước:
+1. Bảng: `V5__link_trainer_npcs.sql` + `entity/GameContentEntities.kt`
+2. Truy vấn: `repository/GameContentRepositories.kt`
+3. Luật chơi: `game/battle/BattleService.kt` (hàm `startTrainerBattle`)
+4. Lệnh trong game: `network/TcpGateway.kt` (opcode `START_TRAINER`, hàm `handleStartTrainer`)
+5. Client: `clients/core/.../net/Op.kt`, `net/TcpClient.kt`, `screen/MapScreen.kt`
+6. Test: `server/src/test/kotlin/.../PvpServiceTest.kt`
 
-Tham khảo đúng các file này để bắt chước khi thêm tính năng tương tự:
-
-1. **Bảng + entity:** cột `enemy_template_id` thêm vào `npcs`
-   (`V5__link_trainer_npcs.sql`, `entity/GameContentEntities.kt`).
-2. **Repository:** `repository/GameContentRepositories.kt`
-   (`findByMapId` cho `NpcEnemyTemplateRepository`).
-3. **Logic:** `game/battle/BattleService.kt` → hàm `startTrainerBattle(...)`
-   (dựng trận PvE, không bắt được, thưởng cố định).
-4. **Giao thức game (real-time):** `network/TcpGateway.kt`
-   - thêm opcode `START_TRAINER = 0x0A` trong `object Op`
-   - thêm `handleStartTrainer(...)` (kiểm tra người chơi đứng cạnh NPC mới cho đấu).
-5. **Client:** `clients/core/src/main/kotlin/com/vqsv/core/net/Op.kt` (opcode),
-   `net/TcpClient.kt` (`sendStartTrainer`), `screen/MapScreen.kt` (phím `G`, vẽ NPC).
-6. **Test:** `server/src/test/kotlin/...` (vd `PvpServiceTest`).
-
-### Checklist khi thêm tính năng
-
-- [ ] Cần lưu dữ liệu? → tạo `entity/` + `repository/` + migration `V{n}__...sql`.
-- [ ] Logic nghiệp vụ → thêm vào `service/` hoặc `game/`.
-- [ ] Truy cập từ web/admin → thêm REST trong `controller/` hoặc `web/`.
-- [ ] Hành động trong game (di chuyển, đánh...) → thêm opcode + handler trong
-      `network/TcpGateway.kt`, rồi cập nhật client (`Op.kt`, `TcpClient.kt`, `screen/`).
-- [ ] Giao thức nhị phân: client và server **phải khớp opcode + thứ tự byte**.
-- [ ] Viết test (`./gradlew test`) và build client (`./gradlew :core:compileKotlin`).
-
-> Giao thức TCP: gói tin = `[2 byte độ dài][1 byte opcode][payload]`, số big-endian.
-> Đối chiếu danh sách opcode ở đầu `network/TcpGateway.kt` (server) và
-> `core/net/Op.kt` (client) — hai bên phải trùng nhau.
+**Checklist:**
+- [ ] Cần lưu dữ liệu? → thêm `entity/` + `repository/` + file migration mới.
+- [ ] Logic → `service/` hoặc `game/`.
+- [ ] Dùng từ web/admin → thêm API trong `controller/`.
+- [ ] Thao tác trong game → thêm opcode + handler ở `network/TcpGateway.kt`, rồi cập
+      nhật client (`Op.kt`, `TcpClient.kt`, `screen/`). **Opcode 2 bên phải khớp nhau.**
+- [ ] Chạy `./gradlew test` và build thử client.
 
 ---
 
-## 8. Sprite ID & asset
+## 8. Sprite ID & hình ảnh
 
-Asset thật nằm trong `clients/core/src/main/resources/game/`:
+Khi đặt `sprite_id` cho mob/npc/vật phẩm, dùng id **có thật** trong thư mục ảnh:
+`clients/core/src/main/resources/game/png/img/img_<id>.png`.
+Muốn biết có những id nào → mở thư mục đó xem tên file.
 
-| Thư mục | Nội dung |
-|---------|----------|
-| `png/img/img_<id>.png` | ảnh atlas (theo `sprite_id`) |
-| `spr/spr_<id>.json` | bảng sprite (module/frame/animation) |
-| `map/map_<id>.json` | dữ liệu tile map |
-| `meta/sprite_table.json` | ánh xạ sprite id → file ảnh |
-
-Khi đặt `sprite_id` cho mob/npc/item, dùng id có thật trong `png/img/`. Muốn xem
-nhanh có những id nào: liệt kê thư mục đó.
-
-**Tạo lại asset từ JAR game mới (hiếm khi cần):**
+Tạo lại toàn bộ asset từ một file game JAR mới (hiếm khi cần):
 ```bash
-python3 tools/asset-extractor/extract.py path/to/game.jar clients/core/src/main/resources/game
+python3 tools/asset-extractor/extract.py duong-dan/game.jar clients/core/src/main/resources/game
 ```
-(JAR gốc không lưu trong repo — bạn tự cung cấp.)
 
 ---
 
-## 9. Lệnh hữu ích & xử lý lỗi
+## 9. Lỗi thường gặp & cách sửa
 
-```bash
-# Server
-cd server && ./gradlew bootRun        # chạy
-cd server && ./gradlew test           # chạy test
-cd server && ./gradlew bootJar        # đóng gói jar
+| Triệu chứng | Nguyên nhân & cách sửa |
+|-------------|------------------------|
+| Lệnh báo `not found` | Chưa cài công cụ hoặc chưa mở Terminal mới sau khi cài. |
+| Server không lên, lỗi kết nối DB | Docker chưa chạy, hoặc `docker compose up -d db redis` chưa làm. Kiểm tra `docker compose ps`. |
+| `checksum mismatch` khi khởi động | Bạn đã **sửa một file migration cũ**. Hoàn nguyên nó, tạo file `V{n+1}__...sql` mới. |
+| Client không vào được server | Sai địa chỉ host (mục 3.4) hoặc cổng `9090` chưa mở (production phải mở firewall 9090). |
+| Web/Admin gọi API lỗi | Sai `NEXT_PUBLIC_API_BASE`. |
+| Đăng nhập admin không được | Chưa đặt `ADMIN_USERNAME/ADMIN_PASSWORD` khi chạy server, hoặc gõ sai. |
+| Thêm nội dung không thấy đổi | Sửa bằng SQL phải khởi động lại server; sửa bằng Admin thì tải lại trang. |
 
-# Client
-cd clients && ./gradlew :desktop:run
-cd clients && ./gradlew :android:assembleDebug
-
-# Web / Admin
-cd web && npm run dev | npm run build
-cd admin && npm run dev | npm run build
-
-# Hạ tầng
-docker compose up -d db redis         # bật DB + Redis
-docker compose logs -f server         # xem log
-docker compose down                   # tắt
-```
-
-**Lỗi thường gặp:**
-
-- *Server không kết nối DB* → kiểm tra `docker compose ps` (db `healthy` chưa),
-  và `DB_URL/DB_USER/DB_PASS` đúng chưa.
-- *Migration lỗi / "checksum mismatch"* → bạn đã sửa file migration cũ. Hoàn nguyên
-  file đó và tạo file `V{n+1}__...sql` mới thay vì sửa.
-- *Client không vào được server* → sai host (mục 3.4) hoặc cổng `9090` chưa mở
-  (production cần mở firewall 9090).
-- *Web/Admin gọi API lỗi CORS/timeout* → sai `NEXT_PUBLIC_API_BASE`.
-- *Admin đăng nhập không được* → chưa đặt `ADMIN_USERNAME/ADMIN_PASSWORD` khi khởi
-  động server, hoặc đăng nhập sai user vừa đặt.
-- *Đổi nội dung game không thấy* → nếu sửa qua SQL phải khởi động lại server; sửa
-  qua Admin thì có hiệu lực ngay (bấm Lưu rồi tải lại trang).
-```
+Còn vướng ở đâu, ghi rõ bạn đang ở **bước nào** và **thông báo lỗi** hiện ra để được hỗ trợ.
