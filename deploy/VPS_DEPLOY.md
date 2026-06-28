@@ -1,33 +1,42 @@
-# VQSV — VPS Deployment Guide
+# VQSV — Hướng dẫn triển khai lên VPS
 
-Deploy the full stack on a fresh Ubuntu 22.04/24.04 VPS in ~10 minutes:
-**server (Spring Boot) + PostgreSQL + Redis + player website (Next.js) +
-admin panel (Next.js) + Caddy HTTPS reverse proxy**.
+Triển khai toàn bộ hệ thống trên một VPS Ubuntu 22.04/24.04 mới tinh trong khoảng
+**10 phút**:
+**server (Spring Boot) + PostgreSQL + Redis + website người chơi (Next.js) +
+trang quản trị (Next.js) + Caddy làm reverse proxy HTTPS tự động.**
 
-## 0. Requirements
+---
 
-- A VPS with a public IP (2 vCPU / 4 GB RAM recommended — it now builds two
-  Next.js apps as well as the Java server).
-- A domain with two **A records** pointing at the VPS IP:
-  - `DOMAIN`        → website + API   (e.g. `play.yourgame.com` → `203.0.113.10`)
-  - `admin.DOMAIN`  → admin panel     (e.g. `admin.play.yourgame.com` → same IP)
+## 0. Yêu cầu
 
-After `docker compose -f docker-compose.prod.yml up -d --build` the stack serves:
-| URL | Service |
+- Một **VPS có IP công khai** (khuyến nghị tối thiểu 2 vCPU / 4 GB RAM — vì hệ thống
+  còn build thêm hai ứng dụng Next.js bên cạnh server Java).
+- Một **tên miền** với hai bản ghi **A record** trỏ về IP của VPS:
+  - `DOMAIN`        → website + API   (ví dụ: `play.yourgame.com` → `203.0.113.10`)
+  - `admin.DOMAIN`  → trang quản trị  (ví dụ: `admin.play.yourgame.com` → cùng IP)
+
+Sau khi chạy `docker compose -f docker-compose.prod.yml up -d --build`, hệ thống
+sẽ phục vụ:
+
+| URL | Dịch vụ |
 |-----|---------|
-| `https://DOMAIN/` | player website |
+| `https://DOMAIN/` | Website người chơi |
 | `https://DOMAIN/api/*`, `/ws` | REST API + WebSocket |
-| `https://admin.DOMAIN/` | admin panel |
-| `DOMAIN:9090` | J2ME binary TCP gateway |
+| `https://admin.DOMAIN/` | Trang quản trị |
+| `DOMAIN:9090` | Cổng TCP nhị phân cho J2ME |
 
-## 1. Install Docker
+---
+
+## 1. Cài đặt Docker
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker   # run docker without sudo
+sudo usermod -aG docker $USER && newgrp docker   # dùng docker không cần sudo
 ```
 
-## 2. Get the code
+---
+
+## 2. Lấy mã nguồn
 
 ```bash
 sudo mkdir -p /opt/vqsv && sudo chown $USER /opt/vqsv
@@ -35,84 +44,108 @@ git clone https://github.com/thanhtinz/vqsv.git /opt/vqsv
 cd /opt/vqsv
 ```
 
-## 3. Configure secrets
+---
+
+## 3. Cấu hình thông tin bí mật
 
 ```bash
 cp .env.example .env
-./scripts/gen-secrets.sh          # fills DB/Redis/JWT secrets automatically
-nano .env                         # set PUBLIC_DOMAIN and ACME_EMAIL
+./scripts/gen-secrets.sh          # tự sinh mật khẩu DB/Redis và JWT secret
+nano .env                         # đặt PUBLIC_DOMAIN và ACME_EMAIL
 ```
 
-## 4. Open the firewall
+Trong file `.env`, cần khai báo tối thiểu:
+
+- `PUBLIC_DOMAIN` — tên miền của bạn (ví dụ `play.yourgame.com`).
+- `ACME_EMAIL` — email để Let's Encrypt gửi thông báo về chứng chỉ.
+
+Các giá trị `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET` đã được
+`gen-secrets.sh` điền tự động bằng chuỗi ngẫu nhiên mạnh. **Tuyệt đối không commit
+file `.env` thật lên git** (đã được `.gitignore` loại trừ).
+
+---
+
+## 4. Mở tường lửa
 
 ```bash
 sudo ufw allow 22/tcp     # SSH
-sudo ufw allow 80/tcp     # HTTP (Let's Encrypt challenge + redirect)
+sudo ufw allow 80/tcp     # HTTP (xác thực Let's Encrypt + chuyển hướng HTTPS)
 sudo ufw allow 443/tcp    # HTTPS (REST API + WebSocket)
-sudo ufw allow 9090/tcp   # J2ME binary TCP gateway
+sudo ufw allow 9090/tcp   # Cổng TCP nhị phân cho J2ME
 sudo ufw enable
 ```
 
-## 5. Launch
+---
+
+## 5. Khởi chạy
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-First boot builds the server image, runs Flyway migrations, and Caddy fetches a
-TLS certificate for your domain. Watch progress:
+Lần chạy đầu tiên sẽ: build image của server, chạy migration Flyway cho cơ sở dữ liệu,
+và Caddy tự động xin chứng chỉ TLS cho tên miền của bạn. Theo dõi tiến trình:
 
 ```bash
 docker compose -f docker-compose.prod.yml logs -f server caddy
 ```
 
-## 6. Verify
+---
+
+## 6. Kiểm tra
 
 ```bash
-curl https://$PUBLIC_DOMAIN/actuator/health        # {"status":"UP"}
+curl https://$PUBLIC_DOMAIN/actuator/health        # kỳ vọng: {"status":"UP"}
 
-# Register a test account:
+# Đăng ký một tài khoản thử nghiệm:
 curl -X POST https://$PUBLIC_DOMAIN/api/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"username":"test","password":"test1234","playerName":"Tester"}'
 ```
 
-The clients connect to:
-| Client | Endpoint |
-|--------|----------|
-| Android / iOS / Web | `https://PUBLIC_DOMAIN` (REST) + `wss://PUBLIC_DOMAIN/ws` (STOMP) |
-| J2ME (legacy) | `PUBLIC_DOMAIN:9090` (raw TCP) |
+Các client sẽ kết nối tới:
 
-## 7. Operations
+| Client | Điểm kết nối |
+|--------|--------------|
+| Android / iOS / Web | `https://PUBLIC_DOMAIN` (REST) + `wss://PUBLIC_DOMAIN/ws` (STOMP) |
+| J2ME (legacy) | `PUBLIC_DOMAIN:9090` (TCP thuần) |
+
+---
+
+## 7. Vận hành
 
 ```bash
-# Update to latest code:
+# Cập nhật lên mã nguồn mới nhất:
 git pull && docker compose -f docker-compose.prod.yml up -d --build
 
-# Tail logs:
+# Xem log:
 docker compose -f docker-compose.prod.yml logs -f server
 
-# Stop / start:
+# Dừng / khởi động lại:
 docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml up -d
 
-# Backups (add to cron — see deploy/backup-db.sh):
+# Sao lưu cơ sở dữ liệu (nên thêm vào cron — xem deploy/backup-db.sh):
 ./deploy/backup-db.sh
 ```
 
-## What this gives you vs. what's still business-side
+---
 
-**Handled by this deploy:** HTTPS, DB persistence + healthchecks, Redis with
-auth + AOF persistence, automatic restarts, graceful shutdown, schema
-migrations, log files, resource limits, DB backups.
+## Những gì bản triển khai này lo, và những gì còn lại thuộc phía vận hành
 
-**Still your responsibility before charging money:**
-- A **payment gateway** (the in-game shop currently uses earned gold/medals;
-  to sell currency you need MoMo/ZaloPay/VNPay/Stripe integration + a
-  top-up endpoint and ledger).
-- Game content scaling (more maps/pets/items beyond the seed data).
-- An **admin/moderation** panel and anti-cheat for the authoritative server.
-- Legal: Terms of Service, privacy policy, and (for Vietnam) a **G1 game
-  licence** to operate a commercial online game.
-- Monitoring/alerting (e.g. Uptime Kuma against `/actuator/health`) and
-  off-site backup storage.
+**Đã được lo sẵn trong bản triển khai này:** HTTPS tự động, lưu trữ và healthcheck
+cho cơ sở dữ liệu, Redis có mật khẩu + bền vững dữ liệu (AOF), tự khởi động lại khi lỗi,
+tắt máy an toàn (graceful shutdown), migration schema, ghi log, giới hạn tài nguyên,
+và sao lưu cơ sở dữ liệu.
+
+**Vẫn là trách nhiệm của bạn trước khi thu phí:**
+
+- **Cổng thanh toán** — cửa hàng trong game hiện dùng kim tiền/huy chương kiếm được
+  khi chơi; muốn bán tiền tệ bằng tiền thật, bạn cần tích hợp MoMo/ZaloPay/VNPay/Stripe
+  cùng một endpoint nạp tiền và sổ cái giao dịch (ledger).
+- **Mở rộng nội dung game** — thêm bản đồ/sủng vật/vật phẩm ngoài dữ liệu seed ban đầu.
+- **Quản trị & kiểm duyệt** — trang admin và chống gian lận cho server có thẩm quyền.
+- **Pháp lý** — Điều khoản dịch vụ, chính sách bảo mật, và (tại Việt Nam) **giấy phép
+  G1** để vận hành game online thương mại.
+- **Giám sát & cảnh báo** — ví dụ Uptime Kuma kiểm tra `/actuator/health`, cùng việc
+  lưu trữ bản sao lưu ở nơi khác (off-site).
