@@ -64,6 +64,8 @@ class TcpGateway(
     private val sessions = ConcurrentHashMap<ChannelId, Long>()
     // channel -> player name (for chat broadcast)
     private val names = ConcurrentHashMap<ChannelId, String>()
+    // channel -> [mapId, x, y] live position (for presence broadcast)
+    private val positions = ConcurrentHashMap<ChannelId, IntArray>()
     // all live channels, for broadcasting
     private val channels = io.netty.channel.group.DefaultChannelGroup(io.netty.util.concurrent.GlobalEventExecutor.INSTANCE)
 
@@ -143,6 +145,15 @@ class TcpGateway(
                 resp.writeByte(auth.player.posX.toInt())
                 resp.writeByte(auth.player.posY.toInt())
                 ctx.write(resp)
+
+                val id = ctx.channel().id()
+                positions[id] = intArrayOf(auth.player.mapId.toInt(), auth.player.posX.toInt(), auth.player.posY.toInt())
+                // Send existing players to the newcomer, then announce the newcomer to everyone else.
+                positions.forEach { (cid, p) ->
+                    if (cid != id) ctx.write(buildPresence(ctx, sessions[cid] ?: 0L, true, p[0], p[1], p[2], names[cid] ?: "?"))
+                }
+                broadcastPresence(id, auth.player.id, true, auth.player.mapId.toInt(),
+                    auth.player.posX.toInt(), auth.player.posY.toInt(), auth.player.name)
             } else {
                 sendError(ctx, result.exceptionOrNull()?.message ?: "Login failed")
             }
@@ -182,6 +193,43 @@ class TcpGateway(
                 resp.writeByte(result.newY.toInt())
             }
             ctx.write(resp)
+
+            // Update tracked position and broadcast presence to other players.
+            val id = ctx.channel().id()
+            val pos = positions.getOrPut(id) { intArrayOf(1, result.newX.toInt(), result.newY.toInt()) }
+            result.newMapId?.let { pos[0] = it.toInt() }
+            pos[1] = result.newX.toInt(); pos[2] = result.newY.toInt()
+            broadcastPresence(id, playerId, true, pos[0], pos[1], pos[2], names[id] ?: "?")
+        }
+
+        // ---- presence helpers ----
+        private fun buildPresence(ctx: ChannelHandlerContext, playerId: Long, present: Boolean,
+                                  mapId: Int, x: Int, y: Int, name: String): ByteBuf {
+            val nameBytes = name.toByteArray(Charsets.UTF_8)
+            val buf = ctx.alloc().buffer()
+            buf.writeByte(Op.PLAYER_NEAR.toInt())
+            buf.writeInt(playerId.toInt())
+            buf.writeByte(if (present) 1 else 0)
+            buf.writeShort(mapId)
+            buf.writeByte(x); buf.writeByte(y)
+            buf.writeShort(nameBytes.size); buf.writeBytes(nameBytes)
+            return buf
+        }
+
+        private fun broadcastPresence(exclude: ChannelId, playerId: Long, present: Boolean,
+                                      mapId: Int, x: Int, y: Int, name: String) {
+            val nameBytes = name.toByteArray(Charsets.UTF_8)
+            channels.forEach { ch ->
+                if (ch.id() == exclude) return@forEach
+                val buf = ch.alloc().buffer()
+                buf.writeByte(Op.PLAYER_NEAR.toInt())
+                buf.writeInt(playerId.toInt())
+                buf.writeByte(if (present) 1 else 0)
+                buf.writeShort(mapId)
+                buf.writeByte(x); buf.writeByte(y)
+                buf.writeShort(nameBytes.size); buf.writeBytes(nameBytes)
+                ch.writeAndFlush(buf)
+            }
         }
 
         private fun handleBattleAct(ctx: ChannelHandlerContext, buf: ByteBuf) {
@@ -258,8 +306,12 @@ class TcpGateway(
         }
 
         override fun channelInactive(ctx: ChannelHandlerContext) {
-            sessions.remove(ctx.channel().id())
-            names.remove(ctx.channel().id())
+            val id = ctx.channel().id()
+            val pid = sessions.remove(id)
+            val pos = positions.remove(id)
+            names.remove(id)
+            // Announce departure so others can drop this player from their map.
+            if (pid != null) broadcastPresence(id, pid, false, pos?.get(0) ?: 0, 0, 0, "")
             log.debug("[INFO] Client disconnected: ${ctx.channel().remoteAddress()}")
         }
 

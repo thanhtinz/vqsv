@@ -160,6 +160,7 @@ class LoginScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onMoveOk(x: Int, y: Int) {}
     override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int) {}
     override fun onChat(name: String, text: String) {}
+    override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {}
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {}
     override fun onPong() {}
 

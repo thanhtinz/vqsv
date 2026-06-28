@@ -33,6 +33,9 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private val chatLog = ArrayList<String>()   // recent chat messages
 
+    private class Other(val name: String, val mapId: Int, val x: Int, val y: Int)
+    private val others = HashMap<Long, Other>()  // other players' live positions
+
     private val PLACEHOLDER_TILE = 32f
     private val MAP_COLS = 20
     private val MAP_ROWS = 12
@@ -59,6 +62,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             // Player marker in the same y-down space.
             shape.projectionMatrix = worldCam.combined
             shape.begin(ShapeRenderer.ShapeType.Filled)
+            shape.color = Color.MAGENTA
+            others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * tile.toFloat(), it.y * tile.toFloat(), tile.toFloat(), tile.toFloat()) }
             shape.color = Color.CYAN
             shape.rect(GameState.posX * tile.toFloat(), GameState.posY * tile.toFloat(), tile.toFloat(), tile.toFloat())
             shape.end()
@@ -70,6 +75,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
                 shape.color = if ((row + col) % 2 == 0) Color(0.2f, 0.6f, 0.2f, 1f) else Color(0.15f, 0.5f, 0.15f, 1f)
                 shape.rect(col * PLACEHOLDER_TILE, row * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
             }
+            shape.color = Color.MAGENTA
+            others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.y) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE) }
             shape.color = Color.CYAN
             shape.rect(GameState.posX * PLACEHOLDER_TILE, (MAP_ROWS - 1 - GameState.posY) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
             shape.end()
@@ -81,6 +88,12 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         val h = Gdx.graphics.height.toFloat()
         font.color = Color.WHITE
         font.draw(batch, "${GameState.playerName} | Lv.${GameState.level} | HP:${GameState.hp}/${GameState.hpMax} | Xu:${GameState.kimTien}", 6f, h - 6f)
+        val onlineHere = others.values.filter { it.mapId == GameState.mapId }
+        if (onlineHere.isNotEmpty()) {
+            font.color = Color.MAGENTA
+            font.draw(batch, "Online: " + onlineHere.joinToString(", ") { it.name }.take(60), 6f, h - 24f)
+            font.color = Color.WHITE
+        }
         font.draw(batch, "WASD di chuyen | P: Cua hang | B: Tui | M: Menu | T: Chat", 6f, 22f)
         // Chat log (recent messages).
         font.color = Color(0.8f, 0.9f, 1f, 1f)
@@ -136,6 +149,11 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         Gdx.app.postRunnable {
             chatLog.add("$name: $text")
             while (chatLog.size > 6) chatLog.removeAt(0)
+        }
+    }
+    override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {
+        Gdx.app.postRunnable {
+            if (present) others[playerId] = Other(name, mapId, x, y) else others.remove(playerId)
         }
     }
     override fun onPong() {}
