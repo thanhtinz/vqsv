@@ -1,27 +1,40 @@
 # Caddy reverse proxy — automatic HTTPS via Let's Encrypt.
-# {$PUBLIC_DOMAIN} and {$ACME_EMAIL} come from the container environment.
+# {$PUBLIC_DOMAIN} / {$ACME_EMAIL} come from the container environment.
+#
+# Routing:
+#   https://DOMAIN/            -> player website (Next.js)        web:3000
+#   https://DOMAIN/api/* /ws/* -> game/web/admin REST + WebSocket server:8080
+#   https://admin.DOMAIN/      -> admin panel (Next.js)           admin:3000
+#
+# The J2ME binary TCP gateway is exposed directly on :9090 (not via Caddy).
 
 {
 	email {$ACME_EMAIL}
 }
 
+# ---- Player website + API on the main domain ----
 {$PUBLIC_DOMAIN} {
 	encode gzip
 
-	# WebSocket (STOMP) endpoint — must be proxied with upgrade support.
-	@ws {
-		path /ws*
-	}
-	reverse_proxy @ws server:8080
+	# Backend API + WebSocket (STOMP). Matched first so they win over the site.
+	@api path /api/* /ws/*
+	reverse_proxy @api server:8080
 
-	# REST API + everything else.
-	reverse_proxy server:8080 {
-		health_uri /actuator/health
-		health_interval 15s
-	}
+	# Everything else -> the Next.js player website.
+	reverse_proxy web:3000
 
 	header {
-		# Basic hardening headers.
+		Strict-Transport-Security "max-age=31536000;"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}
+
+# ---- Admin panel on its own subdomain ----
+admin.{$PUBLIC_DOMAIN} {
+	encode gzip
+	reverse_proxy admin:3000
+	header {
 		Strict-Transport-Security "max-age=31536000;"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"

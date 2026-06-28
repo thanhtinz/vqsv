@@ -1,14 +1,24 @@
 # VQSV — VPS Deployment Guide
 
-Deploy the full game backend (server + PostgreSQL + Redis + HTTPS reverse proxy)
-on a fresh Ubuntu 22.04/24.04 VPS. ~10 minutes.
+Deploy the full stack on a fresh Ubuntu 22.04/24.04 VPS in ~10 minutes:
+**server (Spring Boot) + PostgreSQL + Redis + player website (Next.js) +
+admin panel (Next.js) + Caddy HTTPS reverse proxy**.
 
 ## 0. Requirements
 
-- A VPS with a public IP (1 vCPU / 2 GB RAM is enough to start; 2 vCPU / 4 GB
-  recommended once you have players).
-- A domain name with an **A record** pointing at the VPS IP
-  (e.g. `play.yourgame.com` → `203.0.113.10`).
+- A VPS with a public IP (2 vCPU / 4 GB RAM recommended — it now builds two
+  Next.js apps as well as the Java server).
+- A domain with two **A records** pointing at the VPS IP:
+  - `DOMAIN`        → website + API   (e.g. `play.yourgame.com` → `203.0.113.10`)
+  - `admin.DOMAIN`  → admin panel     (e.g. `admin.play.yourgame.com` → same IP)
+
+After `docker compose -f docker-compose.prod.yml up -d --build` the stack serves:
+| URL | Service |
+|-----|---------|
+| `https://DOMAIN/` | player website |
+| `https://DOMAIN/api/*`, `/ws` | REST API + WebSocket |
+| `https://admin.DOMAIN/` | admin panel |
+| `DOMAIN:9090` | J2ME binary TCP gateway |
 
 ## 1. Install Docker
 

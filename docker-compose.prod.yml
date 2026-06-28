@@ -86,12 +86,44 @@ services:
           memory: 1G
     networks: [vqsv]
 
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_BASE: https://${PUBLIC_DOMAIN}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks: [vqsv]
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_API_BASE: https://${PUBLIC_DOMAIN}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks: [vqsv]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       server:
         condition: service_healthy
+      web:
+        condition: service_started
+      admin:
+        condition: service_started
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
