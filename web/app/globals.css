@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0b0e16;
+  color: #e7eaf3;
+}
+
+body {
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0e16;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a3147;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4259;
+}
+
+/* Rich-text body content (news / events) */
+.prose-vqsv {
+  line-height: 1.75;
+  color: rgba(231, 234, 243, 0.85);
+}
+.prose-vqsv h1,
+.prose-vqsv h2,
+.prose-vqsv h3 {
+  color: #fff;
+  font-weight: 700;
+  margin: 1.2em 0 0.5em;
+}
+.prose-vqsv h2 {
+  font-size: 1.4rem;
+}
+.prose-vqsv h3 {
+  font-size: 1.15rem;
+}
+.prose-vqsv p {
+  margin: 0.75em 0;
+}
+.prose-vqsv ul,
+.prose-vqsv ol {
+  margin: 0.75em 0;
+  padding-left: 1.4em;
+  list-style: disc;
+}
+.prose-vqsv ol {
+  list-style: decimal;
+}
+.prose-vqsv a {
+  color: #f5a623;
+  text-decoration: underline;
+}
+.prose-vqsv img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 1em 0;
+}
+.prose-vqsv strong {
+  color: #fff;
+}
