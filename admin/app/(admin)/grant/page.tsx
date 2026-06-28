@@ -5,20 +5,14 @@ import { apiPost } from "@/lib/api";
 import Button from "@/components/Button";
 import Alert from "@/components/Alert";
 import PageHeader from "@/components/PageHeader";
-import FormField, { TextArea, TextInput } from "@/components/FormField";
-
-const SAMPLE = `{
-  "xu": 1000,
-  "gold": 50000,
-  "items": [
-    { "itemId": 1, "qty": 10 }
-  ]
-}`;
+import FormField, { TextInput } from "@/components/FormField";
+import RewardInput from "@/components/RewardInput";
+import { REWARD_HINT } from "@/lib/reward";
 
 export default function GrantPage() {
   const [serverId, setServerId] = useState("");
   const [playerId, setPlayerId] = useState("");
-  const [rewardJson, setRewardJson] = useState(SAMPLE);
+  const [rewardJson, setRewardJson] = useState('{"xu":0,"gold":0,"items":[]}');
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -31,19 +25,12 @@ export default function GrantPage() {
       setError("Vui lòng nhập máy chủ và ID nhân vật");
       return;
     }
-    let parsed: any;
-    try {
-      parsed = JSON.parse(rewardJson);
-    } catch {
-      setError("rewardJson không phải JSON hợp lệ");
-      return;
-    }
     setSaving(true);
     try {
       await apiPost("/api/admin/grant", {
         serverId: Number(serverId),
         playerId: Number(playerId),
-        rewardJson: JSON.stringify(parsed),
+        rewardJson,
       });
       setNotice("Đã gửi phần thưởng thành công");
     } catch (e: any) {
@@ -86,23 +73,8 @@ export default function GrantPage() {
           </FormField>
         </div>
 
-        <FormField
-          label="Phần thưởng (rewardJson)"
-          required
-          hint={
-            <>
-              Định dạng JSON, vd:{" "}
-              <code>
-                {`{"xu":..,"gold":..,"items":[{"itemId":..,"qty":..}]}`}
-              </code>
-            </>
-          }
-        >
-          <TextArea
-            rows={8}
-            value={rewardJson}
-            onChange={(e) => setRewardJson(e.target.value)}
-          />
+        <FormField label="Phần thưởng" required hint={REWARD_HINT}>
+          <RewardInput value={rewardJson} onChange={setRewardJson} />
         </FormField>
 
         <Button type="submit" disabled={saving} className="mt-2">

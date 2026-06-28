@@ -2,7 +2,7 @@
 
 import CrudResource from "@/components/CrudResource";
 import { Column } from "@/components/DataTable";
-import { REWARD_HINT, REWARD_SAMPLE, validateRewardJson } from "@/lib/reward";
+import { REWARD_HINT, validateRewardJson } from "@/lib/reward";
 import { formatDate } from "@/lib/format";
 
 interface Giftcode {
@@ -56,10 +56,9 @@ export default function GiftcodesPage() {
         { name: "description", label: "Mô tả" },
         {
           name: "rewardJson",
-          label: "Phần thưởng (rewardJson)",
-          type: "json",
+          label: "Phần thưởng",
+          type: "reward",
           required: true,
-          placeholder: REWARD_SAMPLE,
           hint: REWARD_HINT,
         },
         { name: "maxUses", label: "Số lượt tối đa", type: "number", defaultValue: 100 },

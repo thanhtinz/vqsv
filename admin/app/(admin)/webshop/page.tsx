@@ -2,7 +2,7 @@
 
 import CrudResource from "@/components/CrudResource";
 import { Column } from "@/components/DataTable";
-import { REWARD_HINT, REWARD_SAMPLE, validateRewardJson } from "@/lib/reward";
+import { REWARD_HINT, validateRewardJson } from "@/lib/reward";
 import { formatNumber } from "@/lib/format";
 
 interface WebshopProduct {
@@ -50,10 +50,9 @@ export default function WebshopPage() {
         { name: "sortOrder", label: "Thứ tự", type: "number", defaultValue: 0 },
         {
           name: "rewardJson",
-          label: "Phần thưởng (rewardJson)",
-          type: "json",
+          label: "Phần thưởng",
+          type: "reward",
           required: true,
-          placeholder: REWARD_SAMPLE,
           hint: REWARD_HINT,
         },
         { name: "active", label: "Kích hoạt", type: "checkbox", defaultValue: true },
