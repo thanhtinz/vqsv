@@ -31,6 +31,8 @@ class RestClient(private val baseUrl: String) {
         val name: String = "",
         val level: Int = 1,
         val element: String = "",
+        val spriteId: Int = 0,
+        val slot: Int = 0,
         val hpMax: Int = 100,
         val hp: Int = 100,
         val atk: Int = 10,
@@ -69,7 +71,7 @@ class RestClient(private val baseUrl: String) {
     }
 
     fun getMyPets(token: String, cb: (List<PetInfo>?, String?) -> Unit) {
-        get("$baseUrl/api/pets/my", token) { body, err ->
+        get("$baseUrl/api/pets", token) { body, err ->
             if (err != null) { cb(null, err); return@get }
             try {
                 val type = object : TypeToken<List<PetInfo>>() {}.type

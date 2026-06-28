@@ -23,6 +23,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private val worldCam = OrthographicCamera()   // sprites (y-down)
     private val hudCam = OrthographicCamera()      // bars/text (y-up)
     private var enemyAnim: SpriteAnimator? = null  // real monster sprite, if assets present
+    private var playerAnim: SpriteAnimator? = null // player's active pet sprite
 
     private var selectedAction = 0  // 0=Attack 1=UseItem 2=Catch 3=Run
     private var waitingForServer = false
@@ -36,9 +37,19 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         playerHp = GameState.battlePlayerHp
         enemyHp = GameState.battleEnemyHp
         resize(Gdx.graphics.width, Gdx.graphics.height)
+        if (!GameAssets.available()) return
         val sid = GameState.battleEnemySpriteId
-        if (sid >= 0 && GameAssets.available()) {
-            GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
+        if (sid >= 0) GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
+
+        // Load the player's active pet sprite (slot 0) asynchronously.
+        if (GameState.token.isNotEmpty()) {
+            game.rest.getMyPets(GameState.token) { pets, _ ->
+                val active = pets?.minByOrNull { it.slot } ?: pets?.firstOrNull()
+                if (active != null) Gdx.app.postRunnable {
+                    GameState.playerPetSpriteId = active.spriteId
+                    GameAssets.sprite(active.spriteId)?.let { playerAnim = SpriteAnimator(it) }
+                }
+            }
         }
     }
 
@@ -56,12 +67,12 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         val barW = sw * 0.6f
         val barH = 20f
 
-        // Real monster sprite (y-down world space), scaled up for visibility.
-        enemyAnim?.let { anim ->
-            anim.update(delta)
+        // Real sprites (y-down world space): enemy top-right, your pet bottom-left (mirrored).
+        if (enemyAnim != null || playerAnim != null) {
             batch.projectionMatrix = worldCam.combined
             batch.begin()
-            anim.draw(batch, sw * 0.62f, sh * 0.30f)
+            enemyAnim?.let { it.update(delta); it.draw(batch, sw * 0.66f, sh * 0.28f) }
+            playerAnim?.let { it.update(delta); it.draw(batch, sw * 0.30f, sh * 0.60f, mirror = true) }
             batch.end()
         }
 
