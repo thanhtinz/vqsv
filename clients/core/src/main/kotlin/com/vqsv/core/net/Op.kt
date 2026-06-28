@@ -7,6 +7,9 @@ object Op {
     const val BATTLE_ACT: Byte   = 0x03
     const val CHAT: Byte         = 0x04
     const val PING: Byte         = 0x05
+    const val PVP_CHALLENGE: Byte = 0x08
+    const val PVP_RESPOND: Byte   = 0x09
+    const val START_TRAINER: Byte = 0x0A
 
     // Server -> Client
     val AUTH_OK: Byte     = 0x81.toByte()
@@ -16,5 +19,7 @@ object Op {
     val PLAYER_NEAR: Byte = 0x86.toByte()
     val CHAT_MSG: Byte    = 0x87.toByte()
     val PONG: Byte        = 0x88.toByte()
+    val PVP_INVITE: Byte  = 0x89.toByte()
+    val PVP_START: Byte   = 0x8A.toByte()
     val ERROR: Byte       = 0xFF.toByte()
 }

@@ -226,6 +226,11 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private fun doAction() {
         val battleId = GameState.currentBattleId ?: return
+        // In PvP only Attack and Run(=forfeit) are allowed (no catch / item).
+        if (GameState.battleIsPvp && (selectedAction == 1 || selectedAction == 2)) {
+            GameState.battleLog.add("Khong the dung trong PvP")
+            return
+        }
         when (selectedAction) {
             0 -> { game.tcp.sendBattleAct(battleId, 0); waitingForServer = true; playerAttackTimer = 0.45f }
             3 -> { game.tcp.sendBattleAct(battleId, 3); waitingForServer = true }
@@ -294,6 +299,8 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int) {}
     override fun onChat(name: String, text: String) {}
     override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {}
+    override fun onPvpInvite(challengerId: Long, name: String) {}
+    override fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int) {}
     override fun onPong() {}
     override fun onError(msg: String) {
         waitingForServer = false

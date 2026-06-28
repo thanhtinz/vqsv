@@ -32,7 +32,11 @@ data class BattleSession(
     var turn: Int = 0,
     var status: String = "ONGOING",  // ONGOING | WIN | LOSE | RUN | CAUGHT
     val catchable: Boolean = false,
-    val mapWildPetId: Int? = null
+    val mapWildPetId: Int? = null,
+    // Fixed rewards for TRAINER battles (0 = derive from level, as for wild PVE).
+    val enemyExpReward: Int = 0,
+    val enemyGoldReward: Int = 0,
+    val trainerName: String = ""
 )
 
 @Service
@@ -43,7 +47,8 @@ class BattleService(
     private val playerItemRepo: PlayerItemRepository,
     private val battleLogRepo: BattleLogRepository,
     private val badgeRepo: BadgeRepository,
-    private val playerBadgeRepo: PlayerBadgeRepository
+    private val playerBadgeRepo: PlayerBadgeRepository,
+    private val npcEnemyTemplateRepo: NpcEnemyTemplateRepository
 ) {
     // In-memory battle sessions (can move to Redis for multi-node)
     private val activeBattles = ConcurrentHashMap<String, BattleSession>()
@@ -76,6 +81,47 @@ class BattleService(
             playerPetCurrentHp = playerPet.hp,
             catchable = wildPetId != null,
             mapWildPetId = wildPetId
+        )
+
+        activeBattles[session.battleId] = session
+        return session
+    }
+
+    /**
+     * Start a duel against an NPC trainer (the original game's offline trainer
+     * battles). It is a normal PVE fight that is NOT catchable and grants the
+     * trainer's fixed exp/gold reward on victory.
+     */
+    @Transactional
+    fun startTrainerBattle(playerId: Long, trainerId: Short): BattleSession {
+        val trainer = npcEnemyTemplateRepo.findByIdOrNull(trainerId)
+            ?: throw IllegalArgumentException("Huấn luyện viên không tồn tại")
+
+        val playerPet = playerPetRepo.findByPlayerIdAndSlot(playerId, 0)
+            .orElseThrow { IllegalStateException("Không có sủng vật đang chiến đấu") }
+
+        if (playerPet.hp <= 0)
+            throw IllegalStateException("Sủng vật của bạn đã kiệt sức!")
+
+        val session = BattleSession(
+            playerId = playerId,
+            playerPetId = playerPet.id,
+            battleType = "TRAINER",
+            enemyTemplateId = null,
+            enemyLevel = trainer.level,
+            enemyHp = trainer.hp,
+            enemyHpMax = trainer.hp,
+            enemyAtk = trainer.atk,
+            enemyDef = trainer.def,
+            enemySpd = trainer.spd,
+            enemyElement = "FIRE",
+            enemySpriteId = trainer.spriteId,
+            enemyName = trainer.name,
+            playerPetCurrentHp = playerPet.hp,
+            catchable = false,
+            enemyExpReward = trainer.expReward,
+            enemyGoldReward = trainer.goldReward,
+            trainerName = trainer.name
         )
 
         activeBattles[session.battleId] = session
@@ -260,9 +306,16 @@ class BattleService(
 
         when (session.status) {
             "WIN" -> {
-                // Calculate rewards - stub NPC enemy for now
-                val expGain = GameFormula.battleExpReward(20 * session.enemyLevel, player.level.toInt(), session.enemyLevel.toInt())
-                val goldGain = session.enemyLevel * 5
+                // Trainer battles grant a fixed reward; wild battles derive from level.
+                val expGain: Int
+                val goldGain: Int
+                if (session.battleType == "TRAINER") {
+                    expGain = session.enemyExpReward
+                    goldGain = session.enemyGoldReward
+                } else {
+                    expGain = GameFormula.battleExpReward(20 * session.enemyLevel, player.level.toInt(), session.enemyLevel.toInt())
+                    goldGain = session.enemyLevel * 5
+                }
 
                 // Level up pet
                 val newPetExp = playerPet.exp + expGain
@@ -300,7 +353,7 @@ class BattleService(
                 battleLogRepo.save(BattleLog(
                     attackerId = session.playerId,
                     winnerId = session.playerId,
-                    battleType = "PVE",
+                    battleType = session.battleType,
                     turns = session.turn.toShort(),
                     expGained = expGain,
                     goldGained = goldGain
@@ -333,7 +386,7 @@ class BattleService(
                 log.add("Thua! Sủng vật cần nghỉ ngơi.")
                 battleLogRepo.save(BattleLog(
                     attackerId = session.playerId,
-                    battleType = "PVE",
+                    battleType = session.battleType,
                     turns = session.turn.toShort()
                 ))
             }

@@ -35,6 +35,9 @@ object Op {
     const val PING         = 0x05.toByte()
     const val BUY_ITEM     = 0x06.toByte()
     const val USE_ITEM     = 0x07.toByte()
+    const val PVP_CHALLENGE = 0x08.toByte() // [4B targetPlayerId]
+    const val PVP_RESPOND   = 0x09.toByte() // [4B challengerId][1B accept]
+    const val START_TRAINER = 0x0A.toByte() // [2B trainerId] (0 = pick one on current map)
 
     // Server -> Client
     const val AUTH_OK      = 0x81.toByte()
@@ -45,6 +48,8 @@ object Op {
     const val PLAYER_NEAR  = 0x86.toByte()  // nearby player update
     const val CHAT_MSG     = 0x87.toByte()
     const val PONG         = 0x88.toByte()
+    const val PVP_INVITE   = 0x89.toByte()  // [4B challengerId][2B nameLen][name]
+    const val PVP_START    = 0x8A.toByte()  // [2B bidLen][battleId][2B oppNameLen][oppName][2B myHp][2B oppHp]
     const val ERROR        = 0xFF.toByte()
 }
 
@@ -54,6 +59,8 @@ class TcpGateway(
     private val authService: AuthService,
     private val mapService: MapService,
     private val battleService: BattleService,
+    private val pvpService: com.vqsv.game.battle.PvpService,
+    private val npcEnemyTemplateRepo: com.vqsv.repository.NpcEnemyTemplateRepository,
     private val jwtUtil: JwtUtil
 ) {
     private val log = LoggerFactory.getLogger(TcpGateway::class.java)
@@ -66,6 +73,10 @@ class TcpGateway(
     private val names = ConcurrentHashMap<ChannelId, String>()
     // channel -> [mapId, x, y] live position (for presence broadcast)
     private val positions = ConcurrentHashMap<ChannelId, IntArray>()
+    // playerId -> channel (to push targeted messages for PvP)
+    private val playerChannels = ConcurrentHashMap<Long, io.netty.channel.Channel>()
+    // pending PvP challenges: challengerId -> targetId
+    private val pendingChallenges = ConcurrentHashMap<Long, Long>()
     // all live channels, for broadcasting
     private val channels = io.netty.channel.group.DefaultChannelGroup(io.netty.util.concurrent.GlobalEventExecutor.INSTANCE)
 
@@ -110,6 +121,9 @@ class TcpGateway(
                     Op.MOVE  -> handleMove(ctx, msg)
                     Op.BATTLE_ACT -> handleBattleAct(ctx, msg)
                     Op.CHAT  -> handleChat(ctx, msg)
+                    Op.PVP_CHALLENGE -> handlePvpChallenge(ctx, msg)
+                    Op.PVP_RESPOND   -> handlePvpRespond(ctx, msg)
+                    Op.START_TRAINER -> handleStartTrainer(ctx, msg)
                     Op.PING  -> ctx.write(buildPong())
                     else     -> sendError(ctx, "Unknown opcode 0x${opcode.toString(16)}")
                 }
@@ -148,6 +162,7 @@ class TcpGateway(
 
                 val id = ctx.channel().id()
                 positions[id] = intArrayOf(auth.player.mapId.toInt(), auth.player.posX.toInt(), auth.player.posY.toInt())
+                playerChannels[auth.player.id] = ctx.channel()
                 // Send existing players to the newcomer, then announce the newcomer to everyone else.
                 positions.forEach { (cid, p) ->
                     if (cid != id) ctx.write(buildPresence(ctx, sessions[cid] ?: 0L, true, p[0], p[1], p[2], names[cid] ?: "?"))
@@ -245,6 +260,13 @@ class TcpGateway(
             }
             val itemId: Short? = if (buf.readableBytes() >= 2) buf.readShort() else null
 
+            // PvP battles are routed to the PvpService and resolve when both players act.
+            if (pvpService.isPvp(battleId)) {
+                val rr = pvpService.submitAction(battleId, playerId, actionCode.toInt())
+                if (rr != null) sendPvpRound(rr)
+                return
+            }
+
             val turnResult = battleService.processTurn(
                 playerId,
                 BattleAction(battleId = battleId, action = action, itemId = itemId)
@@ -261,6 +283,103 @@ class TcpGateway(
             resp.writeShort(logText.size)
             resp.writeBytes(logText)
             ctx.write(resp)
+        }
+
+        // ---- PvP ----
+        private fun handlePvpChallenge(ctx: ChannelHandlerContext, buf: ByteBuf) {
+            val challengerId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
+            val targetId = buf.readInt().toLong()
+            val targetCh = playerChannels[targetId] ?: run { sendError(ctx, "Người chơi không trực tuyến"); return }
+            pendingChallenges[challengerId] = targetId
+            val name = (names[ctx.channel().id()] ?: "?").toByteArray(Charsets.UTF_8)
+            val inv = targetCh.alloc().buffer()
+            inv.writeByte(Op.PVP_INVITE.toInt())
+            inv.writeInt(challengerId.toInt())
+            inv.writeShort(name.size); inv.writeBytes(name)
+            targetCh.writeAndFlush(inv)
+        }
+
+        private fun handlePvpRespond(ctx: ChannelHandlerContext, buf: ByteBuf) {
+            val responderId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
+            val challengerId = buf.readInt().toLong()
+            val accept = buf.readByte().toInt() != 0
+            if (pendingChallenges.remove(challengerId) != responderId) { sendError(ctx, "Lời mời không hợp lệ"); return }
+            val challengerCh = playerChannels[challengerId] ?: run { sendError(ctx, "Đối thủ đã rời"); return }
+            if (!accept) { sendError(challengerCh, "${names[ctx.channel().id()] ?: "?"} đã từ chối"); return }
+
+            val challengerName = names[challengerCh.id()] ?: "?"
+            val responderName = names[ctx.channel().id()] ?: "?"
+            val s = pvpService.start(challengerId, challengerName, responderId, responderName)
+            if (s == null) { sendError(ctx, "Cần sủng vật để PvP"); sendError(challengerCh, "Cần sủng vật để PvP"); return }
+            // a = challenger, b = responder
+            sendPvpStart(challengerCh, s.battleId, s.b.name, s.a.hp, s.b.hp, s.b.spriteId)
+            sendPvpStart(ctx.channel(), s.battleId, s.a.name, s.b.hp, s.a.hp, s.a.spriteId)
+        }
+
+        // ---- NPC trainer duels (original offline trainer battles) ----
+        private fun handleStartTrainer(ctx: ChannelHandlerContext, buf: ByteBuf) {
+            val playerId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
+            val id = ctx.channel().id()
+            val pos = positions[id] ?: intArrayOf(1, 0, 0)
+            val requested = if (buf.readableBytes() >= 2) buf.readShort() else 0
+
+            // Resolve which trainer to fight: an explicit id, else any trainer on this map.
+            val trainer = if (requested > 0) {
+                npcEnemyTemplateRepo.findById(requested).orElse(null)
+            } else {
+                npcEnemyTemplateRepo.findByMapId(pos[0].toShort()).firstOrNull()
+            }
+            if (trainer == null) { sendError(ctx, "Không có huấn luyện viên ở khu vực này"); return }
+
+            val session = battleService.startTrainerBattle(playerId, trainer.id)
+
+            // Reuse the wild-encounter frame; catchable = 0 marks it as a duel.
+            val resp = ctx.alloc().buffer()
+            resp.writeByte(Op.WILD_ENC.toInt())
+            resp.writeByte(pos[1]); resp.writeByte(pos[2])
+            val bid = session.battleId.toByteArray()
+            resp.writeShort(bid.size); resp.writeBytes(bid)
+            val nm = session.enemyName.toByteArray(Charsets.UTF_8)
+            resp.writeShort(nm.size); resp.writeBytes(nm)
+            resp.writeByte(session.enemyLevel.toInt())
+            resp.writeShort(session.enemyHp)
+            resp.writeByte(0)   // not catchable
+            resp.writeShort(session.enemySpriteId.toInt())
+            ctx.write(resp)
+        }
+
+        private fun sendPvpStart(ch: io.netty.channel.Channel, battleId: String, oppName: String,
+                                 myHp: Int, oppHp: Int, oppSpriteId: Short) {
+            val bid = battleId.toByteArray(); val nm = oppName.toByteArray(Charsets.UTF_8)
+            val b = ch.alloc().buffer()
+            b.writeByte(Op.PVP_START.toInt())
+            b.writeShort(bid.size); b.writeBytes(bid)
+            b.writeShort(nm.size); b.writeBytes(nm)
+            b.writeShort(myHp); b.writeShort(oppHp); b.writeShort(oppSpriteId.toInt())
+            ch.writeAndFlush(b)
+        }
+
+        private fun sendPvpRound(rr: com.vqsv.game.battle.PvpService.RoundResult) {
+            val logText = rr.log.joinToString("\n")
+            // A's perspective
+            playerChannels[rr.aId]?.let { sendBattleTurn(it, rr.aHp, rr.bHp, statusFor(rr.status, true), logText) }
+            // B's perspective
+            playerChannels[rr.bId]?.let { sendBattleTurn(it, rr.bHp, rr.aHp, statusFor(rr.status, false), logText) }
+        }
+
+        private fun statusFor(status: String, isA: Boolean): String = when (status) {
+            "A_WIN" -> if (isA) "VICTORY" else "DEFEAT"
+            "B_WIN" -> if (isA) "DEFEAT" else "VICTORY"
+            else -> "ONGOING"
+        }
+
+        private fun sendBattleTurn(ch: io.netty.channel.Channel, myHp: Int, oppHp: Int, status: String, log: String) {
+            val b = ch.alloc().buffer()
+            b.writeByte(Op.BATTLE_TURN.toInt())
+            b.writeShort(myHp); b.writeShort(oppHp)
+            val st = status.toByteArray(); b.writeByte(st.size); b.writeBytes(st)
+            val lg = log.toByteArray(Charsets.UTF_8); b.writeShort(lg.size); b.writeBytes(lg)
+            ch.writeAndFlush(b)
         }
 
         private fun handleChat(ctx: ChannelHandlerContext, buf: ByteBuf) {
@@ -301,6 +420,14 @@ class TcpGateway(
             ctx.write(resp)
         }
 
+        private fun sendError(ch: io.netty.channel.Channel, msg: String) {
+            val resp = ch.alloc().buffer()
+            resp.writeByte(Op.ERROR.toInt())
+            val b = msg.toByteArray(Charsets.UTF_8)
+            resp.writeShort(b.size); resp.writeBytes(b)
+            ch.writeAndFlush(resp)
+        }
+
         override fun channelActive(ctx: ChannelHandlerContext) {
             channels.add(ctx.channel())   // auto-removed on close
         }
@@ -310,8 +437,15 @@ class TcpGateway(
             val pid = sessions.remove(id)
             val pos = positions.remove(id)
             names.remove(id)
-            // Announce departure so others can drop this player from their map.
-            if (pid != null) broadcastPresence(id, pid, false, pos?.get(0) ?: 0, 0, 0, "")
+            if (pid != null) {
+                playerChannels.remove(pid)
+                pendingChallenges.remove(pid)
+                // If in a PvP battle, award the win to the remaining opponent.
+                pvpService.abortFor(pid)?.let { (_, oppId) ->
+                    playerChannels[oppId]?.let { sendBattleTurn(it, 1, 0, "VICTORY", "Đối thủ đã thoát.") }
+                }
+                broadcastPresence(id, pid, false, pos?.get(0) ?: 0, 0, 0, "")
+            }
             log.debug("[INFO] Client disconnected: ${ctx.channel().remoteAddress()}")
         }
 

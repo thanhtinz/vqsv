@@ -36,6 +36,9 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     private class Other(val name: String, val mapId: Int, val x: Int, val y: Int)
     private val others = HashMap<Long, Other>()  // other players' live positions
 
+    private var pvpInviteFrom: Long? = null       // pending PvP invite (challenger id)
+    private var pvpInviteName: String = ""
+
     private val PLACEHOLDER_TILE = 32f
     private val MAP_COLS = 20
     private val MAP_ROWS = 12
@@ -94,11 +97,17 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             font.draw(batch, "Online: " + onlineHere.joinToString(", ") { it.name }.take(60), 6f, h - 24f)
             font.color = Color.WHITE
         }
-        font.draw(batch, "WASD di chuyen | P: Cua hang | B: Tui | M: Menu | T: Chat", 6f, 22f)
+        font.draw(batch, "WASD | P:Shop B:Tui M:Menu T:Chat F:PvP G:Dau NPC", 6f, 22f)
         // Chat log (recent messages).
         font.color = Color(0.8f, 0.9f, 1f, 1f)
         chatLog.forEachIndexed { i, line ->
             font.draw(batch, line, 6f, 46f + (chatLog.size - 1 - i) * 18f)
+        }
+        // PvP invite popup.
+        pvpInviteFrom?.let {
+            font.color = Color.YELLOW
+            font.draw(batch, "$pvpInviteName moi ban PvP!  Y = Dong y   N = Tu choi", 6f, h * 0.5f)
+            font.color = Color.WHITE
         }
         batch.end()
     }
@@ -110,6 +119,22 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         }
         if (Gdx.input.isKeyJustPressed(Keys.P)) { game.setScreen(ShopScreen(game)); return }
         if (Gdx.input.isKeyJustPressed(Keys.B)) { game.setScreen(PetsScreen(game)); return }
+        // Respond to a pending PvP invite.
+        pvpInviteFrom?.let { cid ->
+            if (Gdx.input.isKeyJustPressed(Keys.Y)) { game.tcp.sendPvpRespond(cid, true); pvpInviteFrom = null; return }
+            if (Gdx.input.isKeyJustPressed(Keys.N)) { game.tcp.sendPvpRespond(cid, false); pvpInviteFrom = null; return }
+        }
+        // G: duel an NPC trainer on this map (original offline trainer battle).
+        if (Gdx.input.isKeyJustPressed(Keys.G)) {
+            game.tcp.sendStartTrainer(); chatLog.add("Tim huan luyen vien de giao dau..."); return
+        }
+        // F: challenge the nearest other player on this map to PvP.
+        if (Gdx.input.isKeyJustPressed(Keys.F)) {
+            val target = others.entries.firstOrNull { it.value.mapId == GameState.mapId }
+            if (target != null) { game.tcp.sendPvpChallenge(target.key); chatLog.add("Da gui loi moi dau ${target.value.name}") }
+            else chatLog.add("Khong co nguoi choi gan day")
+            return
+        }
         // Chat: T opens a text input; the message is broadcast to all players.
         if (Gdx.input.isKeyJustPressed(Keys.T)) {
             Gdx.input.getTextInput(object : com.badlogic.gdx.Input.TextInputListener {
@@ -154,6 +179,22 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {
         Gdx.app.postRunnable {
             if (present) others[playerId] = Other(name, mapId, x, y) else others.remove(playerId)
+        }
+    }
+    override fun onPvpInvite(challengerId: Long, name: String) {
+        Gdx.app.postRunnable { pvpInviteFrom = challengerId; pvpInviteName = name }
+    }
+    override fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int) {
+        Gdx.app.postRunnable {
+            GameState.currentBattleId = battleId
+            GameState.battleEnemyName = oppName
+            GameState.battleEnemyLevel = 0
+            GameState.battleEnemyHp = oppHp
+            GameState.battlePlayerHp = myHp
+            GameState.battleEnemySpriteId = oppSpriteId
+            GameState.battleCatchable = false
+            GameState.battleIsPvp = true
+            game.setScreen(BattleScreen(game))
         }
     }
     override fun onPong() {}

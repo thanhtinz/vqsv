@@ -13,7 +13,9 @@ interface NpcRepository : JpaRepository<Npc, Short> {
 }
 
 @Repository
-interface NpcEnemyTemplateRepository : JpaRepository<NpcEnemyTemplate, Short>
+interface NpcEnemyTemplateRepository : JpaRepository<NpcEnemyTemplate, Short> {
+    fun findByMapId(mapId: Short): List<NpcEnemyTemplate>
+}
 
 @Repository
 interface MapWarpRepository : JpaRepository<MapWarp, Int> {

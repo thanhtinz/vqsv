@@ -147,6 +147,22 @@ class TcpClient {
                 val text = readStr(textLen)
                 listener?.onChat(name, text)
             }
+            Op.PVP_INVITE -> {
+                val challengerId = readInt().toLong()
+                val nameLen = readShort()
+                val name = readStr(nameLen)
+                listener?.onPvpInvite(challengerId, name)
+            }
+            Op.PVP_START -> {
+                val bidLen = readShort()
+                val battleId = readStr(bidLen)
+                val oppNameLen = readShort()
+                val oppName = readStr(oppNameLen)
+                val myHp = readShort()
+                val oppHp = readShort()
+                val oppSpriteId = readShort()
+                listener?.onPvpStart(battleId, oppName, myHp, oppHp, oppSpriteId)
+            }
             Op.PONG -> {
                 listener?.onPong()
             }
@@ -206,6 +222,24 @@ class TcpClient {
         buf[i++] = (tBytes.size and 0xFF).toByte()
         tBytes.forEach { buf[i++] = it }
         sendQueue.put(buf)
+    }
+
+    fun sendPvpChallenge(targetPlayerId: Long) {
+        val t = targetPlayerId.toInt()
+        sendQueue.put(byteArrayOf(Op.PVP_CHALLENGE,
+            (t shr 24).toByte(), (t shr 16).toByte(), (t shr 8).toByte(), t.toByte()))
+    }
+
+    fun sendPvpRespond(challengerId: Long, accept: Boolean) {
+        val c = challengerId.toInt()
+        sendQueue.put(byteArrayOf(Op.PVP_RESPOND,
+            (c shr 24).toByte(), (c shr 16).toByte(), (c shr 8).toByte(), c.toByte(),
+            (if (accept) 1 else 0).toByte()))
+    }
+
+    fun sendStartTrainer(trainerId: Int = 0) {
+        sendQueue.put(byteArrayOf(Op.START_TRAINER,
+            (trainerId shr 8).toByte(), (trainerId and 0xFF).toByte()))
     }
 
     fun sendPing() {
