@@ -84,6 +84,11 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     }
 
     private fun handleInput() {
+        // Open the original in-game menu (gamemenu.ui).
+        if (Gdx.input.isKeyJustPressed(Keys.M)) {
+            game.setScreen(UiScreen(game, "gamemenu") { game.setScreen(MapScreen(game)) })
+            return
+        }
         if (moveCooldown > 0f) return
         val dir = when {
             Gdx.input.isKeyPressed(Keys.W) || Gdx.input.isKeyPressed(Keys.UP) -> 0

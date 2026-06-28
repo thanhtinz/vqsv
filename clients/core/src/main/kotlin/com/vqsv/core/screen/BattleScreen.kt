@@ -25,6 +25,14 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private var enemyAnim: SpriteAnimator? = null  // real monster sprite, if assets present
     private var playerAnim: SpriteAnimator? = null // player's active pet sprite
 
+    // --- battle FX ---
+    private class FloatText(var x: Float, var y: Float, val text: String, val color: Color, var ttl: Float = 1.1f)
+    private val floats = ArrayList<FloatText>()
+    private var enemyShake = 0f
+    private var playerShake = 0f
+    private var playerAttackTimer = 0f
+    private val ATTACK_ANIM = 1   // anim index used as the "attack" action when present
+
     private var selectedAction = 0  // 0=Attack 1=UseItem 2=Catch 3=Run
     private var waitingForServer = false
     private var playerHp = GameState.battlePlayerHp
@@ -67,12 +75,20 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         val barW = sw * 0.6f
         val barH = 20f
 
+        // Advance FX timers.
+        if (enemyShake > 0f) enemyShake -= delta
+        if (playerShake > 0f) playerShake -= delta
+        if (playerAttackTimer > 0f) playerAttackTimer -= delta
+        val enemyDX = if (enemyShake > 0f) (Math.sin(enemyShake.toDouble() * 60).toFloat() * 5f) else 0f
+        val playerDX = if (playerShake > 0f) (Math.sin(playerShake.toDouble() * 60).toFloat() * 5f) else 0f
+        playerAnim?.setAnim(if (playerAttackTimer > 0f) ATTACK_ANIM else 0)
+
         // Real sprites (y-down world space): enemy top-right, your pet bottom-left (mirrored).
         if (enemyAnim != null || playerAnim != null) {
             batch.projectionMatrix = worldCam.combined
             batch.begin()
-            enemyAnim?.let { it.update(delta); it.draw(batch, sw * 0.66f, sh * 0.28f) }
-            playerAnim?.let { it.update(delta); it.draw(batch, sw * 0.30f, sh * 0.60f, mirror = true) }
+            enemyAnim?.let { it.update(delta); it.draw(batch, sw * 0.66f + enemyDX, sh * 0.28f) }
+            playerAnim?.let { it.update(delta); it.draw(batch, sw * 0.30f + playerDX, sh * 0.60f, mirror = true) }
             batch.end()
         }
 
@@ -145,6 +161,18 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         font.draw(batch, if (waitingForServer) "Dang cho server..." else "Mui ten chon, ENTER/SPACE xac nhan",
             5f, sh - 5f)
 
+        // Floating damage numbers (rise + fade).
+        val it = floats.iterator()
+        while (it.hasNext()) {
+            val f = it.next()
+            f.ttl -= delta
+            if (f.ttl <= 0f) { it.remove(); continue }
+            f.y += delta * 40f
+            font.color = f.color.cpy().apply { a = (f.ttl / 1.1f).coerceIn(0f, 1f) }
+            font.draw(batch, f.text, f.x, f.y)
+        }
+        font.color = Color.WHITE
+
         batch.end()
     }
 
@@ -163,15 +191,25 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         val battleId = GameState.currentBattleId ?: return
         game.tcp.sendBattleAct(battleId, selectedAction)
         waitingForServer = true
+        if (selectedAction == 0) playerAttackTimer = 0.45f   // play attack animation
     }
 
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {
+        val dmgEnemy = this.enemyHp - enemyHp     // damage dealt to enemy this turn
+        val dmgPlayer = this.playerHp - playerHp  // damage taken by player this turn
         this.playerHp = playerHp
         this.enemyHp = enemyHp
         GameState.battlePlayerHp = playerHp
         GameState.battleEnemyHp = enemyHp
         GameState.battleLog.add(log)
         waitingForServer = false
+
+        // Battle FX: floating damage + shake (rendered on the GL thread).
+        Gdx.app.postRunnable {
+            val sw = Gdx.graphics.width.toFloat(); val sh = Gdx.graphics.height.toFloat()
+            if (dmgEnemy > 0) { floats.add(FloatText(sw * 0.66f, sh * 0.45f, "-$dmgEnemy", Color.SCARLET)); enemyShake = 0.35f }
+            if (dmgPlayer > 0) { floats.add(FloatText(sw * 0.30f, sh * 0.30f, "-$dmgPlayer", Color.YELLOW)); playerShake = 0.35f }
+        }
 
         val endStatuses = setOf("VICTORY", "DEFEAT", "ESCAPED", "CAUGHT")
         if (status in endStatuses) {
