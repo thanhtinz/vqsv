@@ -8,13 +8,7 @@ dependencies {
   api("com.google.code.gson:gson:2.10.1")
 }
 kotlin { jvmToolchain(17) }
-
-// Bundle the original-game assets (assets/game/**) into the core jar as classpath
-// resources. LibGDX's Gdx.files.internal() falls back to the classpath, so the
-// desktop client picks them up for both `:desktop:run` and the fat JAR without an
-// extra copy step. (Android loads them via its own assets srcDir — see android/.)
-sourceSets {
-  main {
-    resources.srcDir("assets")
-  }
-}
+// Game assets live under src/main/resources/game/** (standard resources layout),
+// so they are bundled into core.jar automatically. LibGDX's Gdx.files.internal()
+// falls back to the classpath, so the desktop client finds them for both
+// `:desktop:run` and the fat JAR. (Android loads them via its assets srcDir.)

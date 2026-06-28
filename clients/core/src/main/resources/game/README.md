@@ -1,7 +1,8 @@
 # Game assets (original, converted)
 
-Real converted assets from the original game, committed directly — no JAR needed
-to build or run. `com.vqsv.core.asset.GameAssets` loads them as plain files.
+Real converted assets from the original game, baked into the source tree as
+standard resources (`src/main/resources/game/`) — no JAR needed to build or run.
+`com.vqsv.core.asset.GameAssets` loads them via `Gdx.files.internal("game/...")`.
 
 ```
 game/
@@ -16,6 +17,8 @@ game/
 
 ## Regenerate (only when the source game changes)
 
+Supply your own copy of the game JAR (it is no longer stored in this repo):
+
 ```bash
-python3 tools/asset-extractor/extract.py assets/original/vqsv-original.jar clients/core/assets/game
+python3 tools/asset-extractor/extract.py path/to/game.jar clients/core/src/main/resources/game
 ```

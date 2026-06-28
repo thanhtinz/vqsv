@@ -32,11 +32,11 @@ android {
         jvmTarget = "17"
     }
 
-    // Package the shared game assets (clients/core/assets/**) into the APK so
-    // Gdx.files.internal("game/...") resolves on Android.
+    // Package the shared game assets (clients/core/src/main/resources/**) into the
+    // APK so Gdx.files.internal("game/...") resolves on Android.
     sourceSets {
         getByName("main") {
-            assets.srcDirs("../core/assets")
+            assets.srcDirs("../core/src/main/resources")
         }
     }
 }

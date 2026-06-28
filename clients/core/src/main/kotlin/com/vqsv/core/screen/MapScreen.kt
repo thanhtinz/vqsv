@@ -17,7 +17,7 @@ import com.vqsv.core.net.PacketListener
 
 /**
  * World screen. Renders the REAL original tile map (when the converted assets are
- * present under assets/game/) using a y-down camera so tiles line up with the
+ * present under src/main/resources/game/) using a y-down camera so tiles line up with the
  * J2ME coordinate system. Falls back to a placeholder grid when assets are absent.
  */
 class MapScreen(private val game: VqsvGame) : Screen, PacketListener {

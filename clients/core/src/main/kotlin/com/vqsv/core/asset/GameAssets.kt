@@ -6,7 +6,8 @@ import com.badlogic.gdx.utils.JsonReader
 import com.badlogic.gdx.utils.JsonValue
 
 /**
- * Loads the original-game assets committed under `assets/game/`:
+ * Loads the original-game assets baked into the source tree under
+ * `clients/core/src/main/resources/game/`:
  *
  *   game/png/img/img_<id>.png    texture atlases
  *   game/png/tex/tex_<id>.png    rebuilt tile textures
@@ -16,8 +17,9 @@ import com.badlogic.gdx.utils.JsonValue
  *   game/meta/sprite_table.json  sprite id -> (sprFileId, imgId...)
  *   game/meta/modInfo.json       tileset id -> (imgId...)
  *
- * The assets are real files in the repo (no JAR needed). Regenerate them from a
- * new game JAR with:  tools/asset-extractor/extract.py <jar> clients/core/assets/game
+ * The assets are committed as standard resources (no JAR needed at build or run
+ * time). To re-extract from a game JAR you supply:
+ *   tools/asset-extractor/extract.py <jar> clients/core/src/main/resources/game
  *
  * Everything is cached. If a file is missing the loaders return null/empty so
  * screens fall back to placeholder rendering and the game still runs.
