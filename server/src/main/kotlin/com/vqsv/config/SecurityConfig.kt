@@ -33,8 +33,11 @@ class SecurityConfig(private val jwtFilter: JwtAuthFilter) {
                     "/api/auth/**",
                     "/ws/**",
                     "/actuator/health",
-                    "/actuator/health/**"
+                    "/actuator/health/**",
+                    "/api/web/auth/**",
+                    "/api/web/public/**"
                 ).permitAll()
+                it.requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "GM")
                 it.anyRequest().authenticated()
             }
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter::class.java)
@@ -68,10 +71,21 @@ class JwtAuthFilter(private val jwtUtil: JwtUtil) : OncePerRequestFilter() {
     ) {
         val token = extractToken(request)
         if (token != null && jwtUtil.validateToken(token)) {
-            val playerId = jwtUtil.getPlayerId(token)
-            val auth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                playerId, null, listOf()
-            )
+            val accountId = jwtUtil.getAccountId(token)
+            val auth = if (accountId != null) {
+                // Web / admin token: principal = accountId, with role authority.
+                val role = jwtUtil.getRole(token) ?: "PLAYER"
+                org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    accountId, null,
+                    listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_$role"))
+                )
+            } else {
+                // Game token: principal = playerId.
+                val playerId = jwtUtil.getPlayerId(token)
+                org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    playerId, null, listOf()
+                )
+            }
             org.springframework.security.core.context.SecurityContextHolder.getContext().authentication = auth
         }
         chain.doFilter(request, response)

@@ -1,6 +1,7 @@
 package com.vqsv.util
 
 import io.jsonwebtoken.*
+import io.jsonwebtoken.io.Decoders
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -16,10 +17,22 @@ class JwtUtil(
         Keys.hmacShaKeyFor(secret.toByteArray())
     }
 
+    // Game token (J2ME / game clients): principal = playerId.
     fun generateToken(username: String, playerId: Long): String =
         Jwts.builder()
             .subject(username)
             .claim("pid", playerId)
+            .issuedAt(Date())
+            .expiration(Date(System.currentTimeMillis() + expirationMs))
+            .signWith(key)
+            .compact()
+
+    // Web token (website / admin): principal = accountId, carries role.
+    fun generateWebToken(username: String, accountId: Long, role: String): String =
+        Jwts.builder()
+            .subject(username)
+            .claim("aid", accountId)
+            .claim("role", role)
             .issuedAt(Date())
             .expiration(Date(System.currentTimeMillis() + expirationMs))
             .signWith(key)
@@ -30,11 +43,14 @@ class JwtUtil(
         true
     }.getOrDefault(false)
 
-    fun getUsername(token: String): String =
-        Jwts.parser().verifyWith(key).build()
-            .parseSignedClaims(token).payload.subject
+    private fun claims(token: String): Claims =
+        Jwts.parser().verifyWith(key).build().parseSignedClaims(token).payload
 
-    fun getPlayerId(token: String): Long =
-        (Jwts.parser().verifyWith(key).build()
-            .parseSignedClaims(token).payload["pid"] as Number).toLong()
+    fun getUsername(token: String): String = claims(token).subject
+
+    fun getPlayerId(token: String): Long = (claims(token)["pid"] as Number).toLong()
+
+    fun getAccountId(token: String): Long? = (claims(token)["aid"] as? Number)?.toLong()
+
+    fun getRole(token: String): String? = claims(token)["role"] as? String
 }

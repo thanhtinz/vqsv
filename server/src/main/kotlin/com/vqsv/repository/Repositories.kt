@@ -1,6 +1,8 @@
 package com.vqsv.repository
 
 import com.vqsv.entity.*
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -12,16 +14,34 @@ interface AccountRepository : JpaRepository<Account, Long> {
     fun findByUsername(username: String): Optional<Account>
     fun existsByUsername(username: String): Boolean
     fun existsByEmail(email: String): Boolean
+    fun findByUsernameContainingIgnoreCase(q: String, pageable: Pageable): Page<Account>
+    fun countByRole(role: String): Long
 }
 
 @Repository
 interface PlayerRepository : JpaRepository<Player, Long> {
     fun findByAccountId(accountId: Long): Optional<Player>
+    fun findAllByAccountId(accountId: Long): List<Player>
+    fun findByAccountIdAndServerId(accountId: Long, serverId: Short): Optional<Player>
     fun findByName(name: String): Optional<Player>
     fun existsByName(name: String): Boolean
+    fun existsByServerIdAndName(serverId: Short, name: String): Boolean
+    fun countByServerId(serverId: Short): Long
 
     @Query("SELECT p FROM Player p WHERE p.mapId = :mapId AND p.isOnline = true")
     fun findOnlinePlayersInMap(mapId: Short): List<Player>
+
+    // Leaderboard: single server
+    fun findByServerIdOrderByLevelDescExpDesc(serverId: Short, pageable: Pageable): List<Player>
+
+    // Leaderboard: cross-server (lien-server) over a set of server ids
+    @Query("SELECT p FROM Player p WHERE p.serverId IN :serverIds ORDER BY p.level DESC, p.exp DESC")
+    fun leaderboardAcrossServers(serverIds: List<Short>, pageable: Pageable): List<Player>
+
+    // Server merge: move all characters from one server to another
+    @Modifying
+    @Query("UPDATE Player p SET p.serverId = :target WHERE p.serverId = :source")
+    fun reassignServer(source: Short, target: Short): Int
 
     @Modifying
     @Query("UPDATE Player p SET p.isOnline = false WHERE p.isOnline = true")
