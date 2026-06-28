@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { TextInput } from "./FormField";
 import Button from "./Button";
+import ItemPicker from "./ItemPicker";
 
 /**
  * Structured editor for a reward bundle. Replaces hand-typed JSON: the admin
@@ -99,20 +100,18 @@ export default function RewardInput({
         ) : (
           <div className="space-y-2">
             {reward.items.map((it, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <label className="flex-1">
-                  <span className="mb-1 block text-[10px] text-gray-500">Item ID</span>
-                  <TextInput
-                    type="number"
-                    min={0}
+              <div key={idx} className="flex items-end gap-2">
+                <div className="flex-[2]">
+                  <span className="mb-1 block text-[10px] text-gray-500">Vật phẩm</span>
+                  <ItemPicker
                     value={it.itemId}
-                    onChange={(e) => {
+                    onChange={(id) => {
                       const items = [...reward.items];
-                      items[idx] = { ...it, itemId: Number(e.target.value) || 0 };
+                      items[idx] = { ...it, itemId: id };
                       emit({ ...reward, items });
                     }}
                   />
-                </label>
+                </div>
                 <label className="flex-1">
                   <span className="mb-1 block text-[10px] text-gray-500">Số lượng</span>
                   <TextInput
@@ -130,7 +129,7 @@ export default function RewardInput({
                   type="button"
                   variant="danger"
                   size="sm"
-                  className="mt-4"
+                  className="mb-0.5"
                   onClick={() =>
                     emit({
                       ...reward,
