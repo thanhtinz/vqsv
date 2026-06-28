@@ -83,6 +83,8 @@ VQSV Online chạy trên nhiều nền tảng, tất cả cùng kết nối về
 
 Đây là dự án phục dựng (reverse-engineer) từ bản J2ME gốc thành kiến trúc client–server online.
 
+- **Bắt đầu phát triển (chạy local):** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- **Build client từng nền tảng:** [`clients/README.md`](clients/README.md)
 - **Hướng dẫn triển khai server lên VPS:** [`deploy/VPS_DEPLOY.md`](deploy/VPS_DEPLOY.md)
 - **Tài liệu kỹ thuật:**
   - Định dạng asset gốc — [`docs/ASSET-FORMATS.md`](docs/ASSET-FORMATS.md)
