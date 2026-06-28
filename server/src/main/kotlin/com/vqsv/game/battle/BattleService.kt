@@ -16,7 +16,7 @@ data class BattleSession(
     val battleId: String = UUID.randomUUID().toString(),
     val playerId: Long,
     val playerPetId: Long,
-    val battleType: String,
+    val battleType: String,         // PVE | PVP
     val enemyPlayerId: Long? = null,
     val enemyTemplateId: Short? = null,
     var enemyLevel: Short = 1,
@@ -29,7 +29,7 @@ data class BattleSession(
     var enemyName: String = "",
     var playerPetCurrentHp: Int = 0,
     var turn: Int = 0,
-    var status: String = "ONGOING",
+    var status: String = "ONGOING",  // ONGOING | WIN | LOSE | RUN | CAUGHT
     val catchable: Boolean = false,
     val mapWildPetId: Int? = null
 )
@@ -44,6 +44,7 @@ class BattleService(
     private val badgeRepo: BadgeRepository,
     private val playerBadgeRepo: PlayerBadgeRepository
 ) {
+    // In-memory battle sessions (can move to Redis for multi-node)
     private val activeBattles = ConcurrentHashMap<String, BattleSession>()
 
     @Transactional
@@ -96,6 +97,7 @@ class BattleService(
 
         when (action.action) {
             "ATTACK" -> {
+                // Player attacks first if spd >= enemy spd
                 val playerFirst = playerPet.spd >= session.enemySpd
 
                 if (playerFirst) {
@@ -103,22 +105,24 @@ class BattleService(
                     val mult = GameFormula.elementMult(playerPetTemplate.element, session.enemyElement)
                     val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit)
                     session.enemyHp -= dmg
-                    log.add("${playerPet.nickname ?: playerPetTemplate.name} tấn công! Gây $dmg sát thương${if (crit) " (Chí mạng!)" else ""}!")
+                    log.add("${playerPet.nickname ?: playerPetTemplate.name} tấn công! Gây ${dmg} sát thương${if (crit) " (Chí mạng!)" else ""}!")
 
                     if (session.enemyHp <= 0) {
                         session.status = "WIN"
                         return finalizeBattle(session, playerPet, log)
                     }
 
+                    // Enemy counter
                     val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
                     val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                     session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} phản công! Gây $eDmg sát thương!")
+                    log.add("${session.enemyName} phản công! Gây ${eDmg} sát thương!")
                 } else {
+                    // Enemy attacks first
                     val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
                     val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                     session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} tấn công trước! Gây $eDmg sát thương!")
+                    log.add("${session.enemyName} tấn công trước! Gây ${eDmg} sát thương!")
 
                     if (session.playerPetCurrentHp <= 0) {
                         session.status = "LOSE"
@@ -129,7 +133,7 @@ class BattleService(
                     val mult = GameFormula.elementMult(playerPetTemplate.element, session.enemyElement)
                     val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit)
                     session.enemyHp -= dmg
-                    log.add("${playerPet.nickname ?: playerPetTemplate.name} phản công! Gây $dmg sát thương${if (crit) " (Chí mạng!)" else ""}!")
+                    log.add("${playerPet.nickname ?: playerPetTemplate.name} phản công! Gây ${dmg} sát thương${if (crit) " (Chí mạng!)" else ""}!")
 
                     if (session.enemyHp <= 0) {
                         session.status = "WIN"
@@ -151,20 +155,25 @@ class BattleService(
                 val item = playerItem.item
                 when (item.itemType) {
                     "MEDICINE" -> {
-                        val heal = minOf(item.effectVal, playerPet.hpMax - session.playerPetCurrentHp)
+                        val heal = minOf(item.effectVal, session.playerPetCurrentHp.let { playerPet.hpMax - it })
                         session.playerPetCurrentHp = minOf(playerPet.hpMax, session.playerPetCurrentHp + item.effectVal)
                         log.add("Dùng ${item.name}! Hồi phục $heal HP!")
                     }
                     else -> throw IllegalArgumentException("Không thể dùng vật phẩm này trong chiến đấu")
                 }
 
-                if (playerItem.quantity <= 1) playerItemRepo.delete(playerItem)
-                else playerItemRepo.save(playerItem.copy(quantity = playerItem.quantity - 1))
+                // Consume item
+                if (playerItem.quantity <= 1) {
+                    playerItemRepo.delete(playerItem)
+                } else {
+                    playerItemRepo.save(playerItem.copy(quantity = playerItem.quantity - 1))
+                }
 
+                // Enemy still attacks
                 val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
                 val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                 session.playerPetCurrentHp -= eDmg
-                log.add("${session.enemyName} tấn công! Gây $eDmg sát thương!")
+                log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
 
                 if (session.playerPetCurrentHp <= 0) {
                     session.status = "LOSE"
@@ -186,6 +195,7 @@ class BattleService(
                 val template = petTemplateRepo.findByIdOrNull(session.enemyTemplateId!!)!!
                 val caught = GameFormula.catchSuccess(template.catchRate.toInt(), hpPct, item.effectVal)
 
+                // Consume catch ball
                 if (playerItem.quantity <= 1) playerItemRepo.delete(playerItem)
                 else playerItemRepo.save(playerItem.copy(quantity = playerItem.quantity - 1))
 
@@ -195,10 +205,11 @@ class BattleService(
                     return finalizeBattle(session, playerPet, log)
                 } else {
                     log.add("Bắt hụt! ${template.name} đã thoát!")
+                    // Enemy retaliates
                     val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
                     val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                     session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} tấn công! Gây $eDmg sát thương!")
+                    log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
 
                     if (session.playerPetCurrentHp <= 0) {
                         session.status = "LOSE"
@@ -208,7 +219,10 @@ class BattleService(
             }
 
             "RUN" -> {
-                val runChance = 70 + (playerPet.spd - session.enemySpd) * 2
+                val runChance = GameFormula.fleeChance(
+                    playerPet.spd.toInt(), session.enemySpd.toInt(),
+                    playerPet.level.toInt(), session.enemyLevel.toInt()
+                )
                 if (Random.nextInt(100) < runChance) {
                     session.status = "RUN"
                     log.add("Chạy thoát thành công!")
@@ -218,13 +232,14 @@ class BattleService(
                     val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
                     val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                     session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} tấn công! Gây $eDmg sát thương!")
+                    log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
                 }
             }
 
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
+        // Sync HP back to pet entity each turn
         playerPetRepo.save(playerPet.copy(hp = session.playerPetCurrentHp.coerceAtLeast(0)))
 
         return BattleTurnResult(
@@ -243,9 +258,11 @@ class BattleService(
 
         when (session.status) {
             "WIN" -> {
+                // Calculate rewards - stub NPC enemy for now
                 val expGain = GameFormula.battleExpReward(20 * session.enemyLevel, player.level.toInt(), session.enemyLevel.toInt())
                 val goldGain = session.enemyLevel * 5
 
+                // Level up pet
                 val newPetExp = playerPet.exp + expGain
                 val petLevelAfter = calcNewLevel(playerPet.level.toInt(), newPetExp)
                 val updatedPet = playerPet.copy(
@@ -259,6 +276,7 @@ class BattleService(
                 )
                 playerPetRepo.save(updatedPet)
 
+                // Player EXP
                 val newPlayerExp = player.exp + expGain / 2
                 val playerLevelAfter = calcNewLevel(player.level.toInt(), newPlayerExp)
                 playerRepo.save(player.copy(
@@ -268,8 +286,14 @@ class BattleService(
                 ))
 
                 log.add("Thắng! +${expGain} EXP, +${goldGain} kim tiền")
-                if (petLevelAfter > playerPet.level) log.add("${updatedPet.nickname ?: updatedPet.template.name} lên cấp $petLevelAfter!")
-                if (playerLevelAfter > player.level) log.add("Nhân vật lên cấp $playerLevelAfter!")
+                if (petLevelAfter > playerPet.level) log.add("${updatedPet.nickname ?: updatedPet.template.name} lên cấp ${petLevelAfter}!")
+                if (playerLevelAfter > player.level) log.add("Nhân vật lên cấp ${playerLevelAfter}!")
+
+                // Check evolve
+                val tpl = updatedPet.template
+                if (tpl.evolveInto != null && petLevelAfter >= (tpl.evolveLv?.toInt() ?: 999)) {
+                    log.add("${updatedPet.nickname ?: updatedPet.template.name} đang tiến hóa...")
+                }
 
                 battleLogRepo.save(BattleLog(
                     attackerId = session.playerId,
@@ -279,12 +303,13 @@ class BattleService(
                     expGained = expGain,
                     goldGained = goldGain
                 ))
+
                 checkBattleBadges(player.id)
             }
 
             "CAUGHT" -> {
                 val template = petTemplateRepo.findByIdOrNull(session.enemyTemplateId!!)!!
-                playerPetRepo.save(PlayerPet(
+                val newPet = PlayerPet(
                     player = player,
                     template = template,
                     level = session.enemyLevel,
@@ -294,7 +319,8 @@ class BattleService(
                     def = session.enemyDef,
                     spd = session.enemySpd,
                     slot = playerPetRepo.countByPlayerId(player.id).toShort().coerceAtMost(5)
-                ))
+                )
+                playerPetRepo.save(newPet)
                 log.add("${template.name} đã gia nhập đội của bạn!")
                 checkCatchBadges(player.id)
             }
@@ -325,7 +351,7 @@ class BattleService(
     private fun calcNewLevel(currentLevel: Int, totalExp: Int): Int {
         var lv = currentLevel
         var exp = totalExp
-        while (lv < 100) {
+        while (lv < GameFormula.LEVEL_CAP) {
             val need = GameFormula.expForLevel(lv)
             if (exp >= need) { exp -= need; lv++ } else break
         }
@@ -334,12 +360,14 @@ class BattleService(
 
     private fun checkBattleBadges(playerId: Long) {
         val wins = battleLogRepo.countByAttackerIdAndWinnerId(playerId, playerId)
-        mapOf(10L to 4.toShort(), 100L to 5.toShort()).forEach { (threshold, badgeId) ->
+        val badgeConditions = mapOf(10L to 4.toShort(), 100L to 5.toShort())
+        badgeConditions.forEach { (threshold, badgeId) ->
             if (wins >= threshold) {
                 val badge = badgeRepo.findByIdOrNull(badgeId) ?: return@forEach
                 val key = PlayerBadgeId(playerId, badgeId)
                 if (!playerBadgeRepo.existsById(key)) {
-                    playerBadgeRepo.save(PlayerBadge(player = playerRepo.findByIdOrNull(playerId)!!, badge = badge))
+                    val player = playerRepo.findByIdOrNull(playerId)!!
+                    playerBadgeRepo.save(PlayerBadge(player = player, badge = badge))
                 }
             }
         }
@@ -347,12 +375,14 @@ class BattleService(
 
     private fun checkCatchBadges(playerId: Long) {
         val petCount = playerPetRepo.countByPlayerId(playerId)
-        mapOf(1L to 2.toShort(), 50L to 3.toShort()).forEach { (threshold, badgeId) ->
+        val badgeConditions = mapOf(1L to 2.toShort(), 50L to 3.toShort())
+        badgeConditions.forEach { (threshold, badgeId) ->
             if (petCount >= threshold) {
                 val badge = badgeRepo.findByIdOrNull(badgeId) ?: return@forEach
                 val key = PlayerBadgeId(playerId, badgeId)
                 if (!playerBadgeRepo.existsById(key)) {
-                    playerBadgeRepo.save(PlayerBadge(player = playerRepo.findByIdOrNull(playerId)!!, badge = badge))
+                    val player = playerRepo.findByIdOrNull(playerId)!!
+                    playerBadgeRepo.save(PlayerBadge(player = player, badge = badge))
                 }
             }
         }
