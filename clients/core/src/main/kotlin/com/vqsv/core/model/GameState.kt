@@ -17,6 +17,7 @@ object GameState {
     var battleEnemyHp: Int = 0
     var battleEnemyName: String = ""
     var battleEnemyLevel: Int = 1
+    var battleEnemySpriteId: Int = -1
     var battleCatchable: Boolean = false
     val battleLog: MutableList<String> = mutableListOf()
 

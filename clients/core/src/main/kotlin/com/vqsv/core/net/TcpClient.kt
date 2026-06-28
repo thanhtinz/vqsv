@@ -118,7 +118,8 @@ class TcpClient {
                 val level = readByte()
                 val hp = readShort()
                 val catchable = readByte() != 0
-                listener?.onWildEncounter(x, y, battleId, name, level, hp, catchable)
+                val spriteId = readShort()
+                listener?.onWildEncounter(x, y, battleId, name, level, hp, catchable, spriteId)
             }
             Op.BATTLE_TURN -> {
                 val playerHp = readShort()

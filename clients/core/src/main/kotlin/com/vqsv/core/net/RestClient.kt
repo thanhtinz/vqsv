@@ -44,7 +44,7 @@ class RestClient(private val baseUrl: String) {
 
     fun login(username: String, password: String, cb: (AuthResponse?, String?) -> Unit) {
         val body = gson.toJson(mapOf("username" to username, "password" to password))
-        post("$baseUrl/api/auth/login", body, null, cb)
+        postRaw("$baseUrl/api/auth/login", body, null) { s, err -> parse(s, err, AuthResponse::class.java, cb) }
     }
 
     fun register(
@@ -57,7 +57,7 @@ class RestClient(private val baseUrl: String) {
         val map = mutableMapOf("username" to username, "password" to password, "playerName" to playerName)
         if (email != null) map["email"] = email
         val body = gson.toJson(map)
-        post("$baseUrl/api/auth/register", body, null, cb)
+        postRaw("$baseUrl/api/auth/register", body, null) { s, err -> parse(s, err, AuthResponse::class.java, cb) }
     }
 
     fun getMyPlayer(token: String, cb: (PlayerInfo?, String?) -> Unit) {
@@ -90,10 +90,16 @@ class RestClient(private val baseUrl: String) {
 
     fun buyItem(token: String, itemId: Int, qty: Int, cb: (PlayerInfo?, String?) -> Unit) {
         val body = gson.toJson(mapOf("itemId" to itemId, "qty" to qty))
-        post("$baseUrl/api/shop/buy", body, token, cb)
+        postRaw("$baseUrl/api/shop/buy", body, token) { s, err -> parse(s, err, PlayerInfo::class.java, cb) }
     }
 
-    private fun post(url: String, bodyJson: String, token: String?, cb: (AuthResponse?, String?) -> Unit) {
+    /** Parse a raw body into [T] and invoke the typed callback. */
+    private fun <T> parse(body: String?, err: String?, cls: Class<T>, cb: (T?, String?) -> Unit) {
+        if (err != null) { cb(null, err); return }
+        try { cb(gson.fromJson(body, cls), null) } catch (e: Exception) { cb(null, e.message) }
+    }
+
+    private fun postRaw(url: String, bodyJson: String, token: String?, cb: (String?, String?) -> Unit) {
         val reqBody = bodyJson.toRequestBody(JSON)
         val reqBuilder = Request.Builder().url(url).post(reqBody)
         if (token != null) reqBuilder.addHeader("Authorization", "Bearer $token")
@@ -102,23 +108,7 @@ class RestClient(private val baseUrl: String) {
             override fun onResponse(call: Call, response: Response) {
                 val bodyStr = response.body?.string()
                 if (!response.isSuccessful) { cb(null, "HTTP ${response.code}: $bodyStr"); return }
-                try { cb(gson.fromJson(bodyStr, AuthResponse::class.java), null) }
-                catch (e: Exception) { cb(null, e.message) }
-            }
-        })
-    }
-
-    private fun post(url: String, bodyJson: String, token: String?, cb: (PlayerInfo?, String?) -> Unit) {
-        val reqBody = bodyJson.toRequestBody(JSON)
-        val reqBuilder = Request.Builder().url(url).post(reqBody)
-        if (token != null) reqBuilder.addHeader("Authorization", "Bearer $token")
-        client.newCall(reqBuilder.build()).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { cb(null, e.message) }
-            override fun onResponse(call: Call, response: Response) {
-                val bodyStr = response.body?.string()
-                if (!response.isSuccessful) { cb(null, "HTTP ${response.code}: $bodyStr"); return }
-                try { cb(gson.fromJson(bodyStr, PlayerInfo::class.java), null) }
-                catch (e: Exception) { cb(null, e.message) }
+                cb(bodyStr, null)
             }
         })
     }

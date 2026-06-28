@@ -2,63 +2,81 @@ package com.vqsv.core.asset
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.utils.JsonReader
+import com.badlogic.gdx.utils.JsonValue
 
 /**
- * Loads the converted original-game assets bundled under `assets/game/`.
+ * Loads the converted original-game assets produced by
+ * `tools/asset-extractor/extract.py` into `assets/game/`:
  *
- * The asset pipeline (`tools/asset-extractor/extract.py`) turns the original
- * J2ME JAR into:
- *   game/img/img_N.png    — texture atlases (verified, byte-exact)
- *   game/spr/spr_N.json   — sprite frame tables (header + frame stream)
- *   game/map/map_N.json   — tile maps
+ *   game/png/img/img_<id>.png   texture atlases (byte-exact PNGs)
+ *   game/png/tex/tex_<id>.png   rebuilt tile textures
+ *   game/spr/spr_<id>.json      sprite tables (modules/frames/anims) — see GameSprite
+ *   game/map/map_<id>.json      tile maps — see TileMap
+ *   game/mod/mod_<t>.json       tileset tile rects
+ *   game/meta/sprite_table.json sprite id -> [sprFileId, imgId0, imgId1, ...]
+ *   game/meta/modInfo.json      tileset id -> [imgId0, imgId1, ...]
  *
- * Run it once to populate the folder:
- *   cd tools/asset-extractor
- *   python3 extract.py ../../assets/original/vqsv-original.jar ../../clients/core/assets/game
- *
- * If the folder is empty the loaders return null/empty and screens fall back to
- * the placeholder rendering, so the game still runs without assets present.
+ * Everything is cached. If the folder is missing the loaders return null/empty so
+ * screens fall back to placeholder rendering and the game still runs.
  */
 object GameAssets {
-    private val images = HashMap<Int, Texture>()
+    const val ROOT = "game"
     private val json = JsonReader()
 
-    /** Lazily load and cache an image atlas (img_N.png). Returns null if absent. */
-    fun image(id: Int): Texture? = images.getOrPut(id) {
-        val path = "game/img/img_$id.png"
-        if (Gdx.files.internal(path).exists()) Texture(Gdx.files.internal(path))
-        else return null
+    private val textures = HashMap<Int, Texture?>()      // imgId -> atlas (null if missing)
+    private val sprites = HashMap<Int, GameSprite?>()     // spriteId -> loaded sprite
+    private var spriteTable: JsonValue? = null            // [[sprFileId, img...], ...]
+    private var modInfo: JsonValue? = null                // [[img...], ...]
+    private val tilesets = HashMap<Int, JsonValue?>()     // tileset -> [ {img,x,y,w,h}, ... ]
+
+    fun available(): Boolean = Gdx.files.internal("$ROOT/meta/sprite_table.json").exists()
+
+    private fun readJson(path: String): JsonValue? {
+        val f = Gdx.files.internal(path)
+        return if (f.exists()) json.parse(f) else null
     }
 
-    /** A sprite frame: a clip rectangle into the matching img_N atlas. */
-    data class Frame(val x: Int, val y: Int, val w: Int, val h: Int)
-
-    /**
-     * Parse a sprite table (spr_N.json). The frame/module stream is engine
-     * specific and only partially decoded upstream, so this returns the raw
-     * header + stream for callers that want to refine slicing. See
-     * docs/ASSET-FORMATS.md.
-     */
-    fun spriteStream(id: Int): IntArray {
-        val path = "game/spr/spr_$id.json"
-        if (!Gdx.files.internal(path).exists()) return IntArray(0)
-        val root = json.parse(Gdx.files.internal(path))
-        val stream = root.get("stream") ?: return IntArray(0)
-        return IntArray(stream.size) { stream.get(it).asInt() }
+    /** Atlas texture by img id (game/png/img/img_<id>.png). Cached; null if absent. */
+    fun atlas(imgId: Int): Texture? = textures.getOrPut(imgId) {
+        val f = Gdx.files.internal("$ROOT/png/img/img_$imgId.png")
+        if (f.exists()) Texture(f) else null
     }
 
-    /** Build a TextureRegion clip from an atlas, if the atlas exists. */
-    fun region(imgId: Int, frame: Frame): TextureRegion? {
-        val tex = image(imgId) ?: return null
-        return TextureRegion(tex, frame.x, frame.y, frame.w, frame.h)
+    private fun spriteTable(): JsonValue? {
+        if (spriteTable == null) spriteTable = readJson("$ROOT/meta/sprite_table.json")
+        return spriteTable
     }
 
-    fun isLoaded(): Boolean = Gdx.files.internal("game/img/img_0.png").exists()
+    fun modInfo(): JsonValue? {
+        if (modInfo == null) modInfo = readJson("$ROOT/meta/modInfo.json")
+        return modInfo
+    }
+
+    fun tileset(tilesetId: Int): JsonValue? = tilesets.getOrPut(tilesetId) {
+        readJson("$ROOT/mod/mod_$tilesetId.json")
+    }
+
+    /** Resolve a sprite's atlas image-id list from the sprite table (entry[1..]). */
+    fun spriteImageIds(spriteId: Int): IntArray {
+        val table = spriteTable() ?: return IntArray(0)
+        if (spriteId < 0 || spriteId >= table.size) return IntArray(0)
+        val row = table[spriteId]
+        if (row.size <= 1) return IntArray(0)
+        return IntArray(row.size - 1) { row[it + 1].asInt() }
+    }
+
+    /** Load (and cache) a fully-parsed sprite. Null if assets/sprite absent. */
+    fun sprite(spriteId: Int): GameSprite? = sprites.getOrPut(spriteId) {
+        val root = readJson("$ROOT/spr/spr_$spriteId.json") ?: return@getOrPut null
+        GameSprite.parse(spriteId, root, spriteImageIds(spriteId))
+    }
+
+    fun mapJson(mapId: Int): JsonValue? = readJson("$ROOT/map/map_$mapId.json")
 
     fun dispose() {
-        images.values.forEach { it.dispose() }
-        images.clear()
+        textures.values.forEach { it?.dispose() }
+        textures.clear(); sprites.clear(); tilesets.clear()
+        spriteTable = null; modInfo = null
     }
 }

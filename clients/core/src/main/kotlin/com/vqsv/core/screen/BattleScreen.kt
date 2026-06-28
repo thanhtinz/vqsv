@@ -5,10 +5,13 @@ import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.vqsv.core.VqsvGame
+import com.vqsv.core.asset.GameAssets
+import com.vqsv.core.asset.SpriteAnimator
 import com.vqsv.core.model.GameState
 import com.vqsv.core.net.PacketListener
 
@@ -17,6 +20,9 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private val shapeRenderer = ShapeRenderer()
     private val batch = SpriteBatch()
     private val font = BitmapFont()
+    private val worldCam = OrthographicCamera()   // sprites (y-down)
+    private val hudCam = OrthographicCamera()      // bars/text (y-up)
+    private var enemyAnim: SpriteAnimator? = null  // real monster sprite, if assets present
 
     private var selectedAction = 0  // 0=Attack 1=UseItem 2=Catch 3=Run
     private var waitingForServer = false
@@ -29,6 +35,11 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         game.tcp.listener = this
         playerHp = GameState.battlePlayerHp
         enemyHp = GameState.battleEnemyHp
+        resize(Gdx.graphics.width, Gdx.graphics.height)
+        val sid = GameState.battleEnemySpriteId
+        if (sid >= 0 && GameAssets.available()) {
+            GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
+        }
     }
 
     override fun render(delta: Float) {
@@ -45,6 +56,16 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         val barW = sw * 0.6f
         val barH = 20f
 
+        // Real monster sprite (y-down world space), scaled up for visibility.
+        enemyAnim?.let { anim ->
+            anim.update(delta)
+            batch.projectionMatrix = worldCam.combined
+            batch.begin()
+            anim.draw(batch, sw * 0.62f, sh * 0.30f)
+            batch.end()
+        }
+
+        shapeRenderer.projectionMatrix = hudCam.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
 
         // Enemy HP bar (red) near top
@@ -80,6 +101,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
         shapeRenderer.end()
 
+        batch.projectionMatrix = hudCam.combined
         batch.begin()
         font.color = Color.WHITE
 
@@ -152,14 +174,17 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     override fun onAuthOk(token: String, level: Int, kimTien: Int, mapId: Int, posX: Int, posY: Int) {}
     override fun onMoveOk(x: Int, y: Int) {}
-    override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean) {}
+    override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int) {}
     override fun onPong() {}
     override fun onError(msg: String) {
         waitingForServer = false
         GameState.battleLog.add("Loi: $msg")
     }
 
-    override fun resize(width: Int, height: Int) {}
+    override fun resize(width: Int, height: Int) {
+        worldCam.setToOrtho(true, width.toFloat(), height.toFloat())
+        hudCam.setToOrtho(false, width.toFloat(), height.toFloat())
+    }
     override fun hide() {}
     override fun pause() {}
     override fun resume() {}
