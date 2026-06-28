@@ -31,6 +31,14 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // Package the shared game assets (clients/core/assets/**) into the APK so
+    // Gdx.files.internal("game/...") resolves on Android.
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("../core/assets")
+        }
+    }
 }
 
 dependencies {
