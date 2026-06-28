@@ -1,27 +1,17 @@
-# Bundled game assets
+# Game assets
 
-This folder is populated by the asset pipeline — it is intentionally empty in
-version control because the converted assets are **derived** from the original
-game JAR (and include binary PNGs that are regenerated, not hand-edited).
+The converted original-game assets are **baked into this repo** as a base64-chunked
+zip bundle at `clients/core/assets/game.pack.NNN.b64`. No original JAR is needed to
+build or run — `com.vqsv.core.asset.GameAssets` unpacks it in memory on first use
+(base64 → unzip → textures/JSON).
 
-## Populate
+Bundle contents: 337 PNG atlases, 345 sprite tables, 102 tile maps, 44 UI layouts,
+tileset metadata.
+
+## Regenerate (only when the source game changes)
 
 ```bash
-# 1. Put the original game JAR here:
-#      assets/original/vqsv-original.jar
-# 2. Run the extractor, pointing output at this folder:
-cd tools/asset-extractor
-python3 extract.py ../../assets/original/vqsv-original.jar ../../clients/core/assets/game
+tools/asset-extractor/pack.sh path/to/game.jar
 ```
 
-Result:
-
-```
-game/
-├── img/   img_N.png    (309 texture atlases)
-├── spr/   spr_N.json   (345 sprite tables)
-└── map/   map_N.json   (102 tile maps)
-```
-
-`com.vqsv.core.asset.GameAssets` loads these at runtime. If the folder is empty,
-the clients fall back to placeholder rendering and still run.
+This re-extracts and rewrites the `game.pack.*.b64` chunks; commit them.
