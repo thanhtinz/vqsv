@@ -21,10 +21,11 @@ async function getNews(slug: string): Promise<NewsDetail | null> {
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   try {
-    const news = await getNews(params.slug);
+    const { slug } = await params;
+    const news = await getNews(slug);
     if (!news) return { title: "Không tìm thấy tin tức" };
     return {
       title: news.title,
@@ -43,12 +44,13 @@ export async function generateMetadata({
 export default async function NewsDetailPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
   let news: NewsDetail | null = null;
   let error = "";
   try {
-    news = await getNews(params.slug);
+    const { slug } = await params;
+    news = await getNews(slug);
   } catch (e) {
     error = e instanceof Error ? e.message : "Không tải được bài viết.";
   }
