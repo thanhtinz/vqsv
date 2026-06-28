@@ -118,7 +118,7 @@ data class PetTemplate(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Short = 0,
 
-    @Column(nullable = false, length = 32)
+    @Column(nullable = false, length = 64)
     val name: String = "",
 
     @Column(name = "sprite_id", nullable = false)
@@ -161,7 +161,50 @@ data class PetTemplate(
     val evolveLv: Short? = null,
 
     @Column(columnDefinition = "TEXT")
-    val description: String? = null
+    val description: String? = null,
+
+    // ---- Original linear stat coefficients (decoded from db.mid) ----
+    @Column(name = "element_id", nullable = false)
+    val elementId: Short = 0,
+
+    @Column(name = "hp_base", nullable = false)
+    val hpBase: Int = 0,
+    @Column(name = "hp_per", nullable = false)
+    val hpPer: Int = 0,
+    @Column(name = "hp_flat", nullable = false)
+    val hpFlat: Int = 0,
+
+    @Column(name = "atk_base", nullable = false)
+    val atkBase: Int = 0,
+    @Column(name = "atk_per", nullable = false)
+    val atkPer: Int = 0,
+    @Column(name = "atk_flat", nullable = false)
+    val atkFlat: Int = 0,
+
+    @Column(name = "def_base", nullable = false)
+    val defBase: Int = 0,
+    @Column(name = "def_per", nullable = false)
+    val defPer: Int = 0,
+    @Column(name = "def_flat", nullable = false)
+    val defFlat: Int = 0,
+
+    @Column(name = "spd_base", nullable = false)
+    val spdBase: Int = 0,
+    @Column(name = "spd_per", nullable = false)
+    val spdPer: Int = 0,
+    @Column(name = "spd_flat", nullable = false)
+    val spdFlat: Int = 0,
+
+    @Column(name = "world_ability", nullable = false)
+    val worldAbility: Short = 0,
+    @Column(name = "base_grade", nullable = false)
+    val baseGrade: Short = 1,
+    @Column(name = "max_grade", nullable = false)
+    val maxGrade: Short = 5,
+    @Column(name = "rarity", nullable = false)
+    val rarity: Short = 0,
+    @Column(name = "skill_elem", nullable = false)
+    val skillElem: Short = 0
 )
 
 // ============================================================
@@ -211,8 +254,48 @@ data class PlayerPet(
     @Column(nullable = false)
     var loyalty: Short = 50,
 
+    @Column(nullable = false)
+    var grade: Short = 3,
+
     @CreationTimestamp
     val obtainedAt: Instant = Instant.now()
+)
+
+// ============================================================
+// SKILL
+// ============================================================
+@Entity
+@Table(name = "skills")
+data class Skill(
+    @Id
+    val id: Short = 0,
+
+    @Column(nullable = false, length = 64)
+    val name: String = "",
+
+    @Column(columnDefinition = "TEXT")
+    val description: String? = null,
+
+    @Column(nullable = false)
+    val element: Short = 0,
+
+    @Column(name = "required_level", nullable = false)
+    val requiredLevel: Short = 1,
+
+    @Column(name = "sp_cost", nullable = false)
+    val spCost: Short = 0,
+
+    @Column(nullable = false)
+    val power: Short = 0,
+
+    @Column(name = "effect_id")
+    val effectId: Short? = null,
+
+    @Column(name = "behavior_flag", nullable = false)
+    val behaviorFlag: Short = 0,
+
+    @Column(name = "target_code", nullable = false)
+    val targetCode: Short = 0
 )
 
 // ============================================================

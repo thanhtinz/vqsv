@@ -6,7 +6,7 @@ import kotlin.random.Random
 
 /**
  * Game rules ported to match the ORIGINAL J2ME game ("Sủng vật Vương quốc").
- * Formulas reverse-engineered from `game/j.java` — see docs/ORIGINAL-MECHANICS.md.
+ * Formulas reverse-engineered from `game/j.java` -- see docs/ORIGINAL-MECHANICS.md.
  *
  * Note on exact stat VALUES: the original computes stats as a linear
  * `(base + perLvl*level + flat) * gradeMult/100` from the species table in
@@ -18,7 +18,7 @@ object GameFormula {
 
     const val LEVEL_CAP = 50
 
-    // Grade (quality tier 1..5) multiplier, percent — N[] in j.java.
+    // Grade (quality tier 1..5) multiplier, percent -- N[] in j.java.
     private val GRADE_MULT = intArrayOf(90, 95, 100, 110, 125)
     fun gradeMult(grade: Int): Int = GRADE_MULT[(grade - 1).coerceIn(0, 4)]
 
@@ -26,14 +26,24 @@ object GameFormula {
     fun expForLevel(level: Int): Int =
         (15 * level * level - 200).coerceAtLeast(50)
 
-    // ---- Stat growth (template-driven until db.mid species table is imported) ----
+    // ---- Legacy exponential growth (UNUSED, kept for signature compatibility) ----
     fun petStat(base: Int, growth: Double, level: Int): Int =
         (base * Math.pow(growth, (level - 1).toDouble())).roundToInt()
 
-    fun petHpMax(template: PetTemplate, level: Int): Int = petStat(template.baseHp.toInt(), template.growthHp, level)
-    fun petAtk(template: PetTemplate, level: Int): Int = petStat(template.baseAtk.toInt(), template.growthAtk, level)
-    fun petDef(template: PetTemplate, level: Int): Int = petStat(template.baseDef.toInt(), template.growthDef, level)
-    fun petSpd(template: PetTemplate, level: Int): Int = petStat(template.baseSpd.toInt(), template.growthSpd, level)
+    // ---- Original LINEAR stat formula (decoded from db.mid species table) ----
+    // stat = (base + perLvl*level/div + flat) * gradeMult/100
+    //   div = 1 for HP/ATK, div = 10 for DEF/SPD. Default grade 3 (=100).
+    fun petHpMax(template: PetTemplate, level: Int, grade: Int = 3): Int =
+        ((template.hpBase + template.hpPer * level + template.hpFlat) * gradeMult(grade) / 100).coerceAtLeast(1)
+
+    fun petAtk(template: PetTemplate, level: Int, grade: Int = 3): Int =
+        ((template.atkBase + template.atkPer * level + template.atkFlat) * gradeMult(grade) / 100).coerceAtLeast(1)
+
+    fun petDef(template: PetTemplate, level: Int, grade: Int = 3): Int =
+        ((template.defBase + template.defPer * level / 10 + template.defFlat) * gradeMult(grade) / 100).coerceAtLeast(1)
+
+    fun petSpd(template: PetTemplate, level: Int, grade: Int = 3): Int =
+        ((template.spdBase + template.spdPer * level / 10 + template.spdFlat) * gradeMult(grade) / 100).coerceAtLeast(1)
 
     /**
      * Damage = (ATK - DEF) * skillPower% * elementMult * crit, minimum 1.
@@ -46,7 +56,7 @@ object GameFormula {
         return dmg.roundToInt().coerceAtLeast(1)
     }
 
-    // Crit chance = 5 + SPD/2 (percent). (+30 for max-evolved final stage — not modelled here.)
+    // Crit chance = 5 + SPD/2 (percent). (+30 for max-evolved final stage -- not modelled here.)
     fun isCrit(spd: Int): Boolean = Random.nextInt(100) < (5 + spd / 2)
 
     // ---- Element relations (7 elements, ids per j.a(j)) ----
