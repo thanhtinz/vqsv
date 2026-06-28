@@ -126,3 +126,68 @@ POST /api/shop/buy        Body: {shopListingId, quantity}
 | Android | `client-android/README.md` |
 | iOS | dùng REST API + STOMP (Swift/Flutter) |
 | Web | dùng REST API + STOMP (React/Vue) |
+
+---
+
+## Client Platforms
+
+| Platform | Language | Directory | Build Tool |
+|----------|----------|-----------|------------|
+| **Android** | Kotlin + LibGDX | `clients/android/` | Gradle |
+| **PC Desktop** | Kotlin + LibGDX + LWJGL3 | `clients/desktop/` | Gradle |
+| **iOS** | Flutter + Dart | `client-ios/` | Flutter CLI |
+| **J2ME (Legacy)** | Java ME MIDP 2.0 | `client-j2me/` | Apache Ant |
+
+### Architecture
+
+All modern clients (Android, PC, iOS) share the same game protocol implementation:
+- **TCP Binary** (port 9090) — primary low-latency game channel for login/move/battle
+- **REST HTTP** (port 8080) — initial auth, shop, pet management
+- **WebSocket STOMP** (port 8080/ws) — real-time map events (player positions, chat)
+
+The Android and PC clients share a common LibGDX core module (`clients/core/`) for game logic and rendering.
+
+### Build & Run
+
+**Prerequisites:** Java 17+, Android SDK (for Android), Flutter 3.19+ (for iOS)
+
+**Android:**
+```bash
+cd clients
+./gradlew :android:assembleDebug
+# Install on connected device/emulator:
+adb install android/build/outputs/apk/debug/android-debug.apk
+```
+
+**PC Desktop:**
+```bash
+cd clients
+./gradlew :desktop:run
+# Or build a standalone JAR:
+./gradlew :desktop:fatJar
+java -jar desktop/build/libs/desktop-all.jar
+```
+
+**iOS / Flutter (also runs on Android):**
+```bash
+cd client-ios
+flutter pub get
+flutter run                    # iOS Simulator or Android device
+flutter build ipa              # Production iOS IPA
+flutter build apk              # Production Android APK
+```
+
+**J2ME Legacy (requires WTK 2.5):**
+```bash
+cd client-j2me
+# Edit src/com/vqsv/j2me/screen/LoginScreen.java and set SERVER_HOST
+ant build
+# Run in emulator:
+java -jar /path/to/microemulator.jar dist/vqsv.jar
+```
+
+### Orientation
+
+All modern clients default to **landscape (800×480)**.  
+The J2ME client preserves the original **portrait (360×640)** layout.  
+Converting portrait to landscape only requires adjusting UI layout coordinates — sprite assets and map tiles are orientation-agnostic.
