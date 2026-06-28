@@ -52,6 +52,16 @@ class RestClient(private val baseUrl: String) {
         val description: String? = null
     )
 
+    data class InventoryItem(
+        val itemId: Int = 0,
+        val name: String = "",
+        val itemType: String = "",
+        val effectVal: Int = 0,
+        val iconId: Int = 0,
+        val quantity: Int = 0,
+        val description: String? = null
+    )
+
     private val client = OkHttpClient()
     private val gson = Gson()
     private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -97,6 +107,16 @@ class RestClient(private val baseUrl: String) {
             if (err != null) { cb(null, err); return@get }
             try {
                 val type = object : TypeToken<List<ShopItem>>() {}.type
+                cb(gson.fromJson(body, type), null)
+            } catch (e: Exception) { cb(null, e.message) }
+        }
+    }
+
+    fun getInventory(token: String, cb: (List<InventoryItem>?, String?) -> Unit) {
+        get("$baseUrl/api/shop/inventory", token) { body, err ->
+            if (err != null) { cb(null, err); return@get }
+            try {
+                val type = object : TypeToken<List<InventoryItem>>() {}.type
                 cb(gson.fromJson(body, type), null)
             } catch (e: Exception) { cb(null, e.message) }
         }

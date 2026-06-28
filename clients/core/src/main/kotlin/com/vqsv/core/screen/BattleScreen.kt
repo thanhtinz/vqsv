@@ -14,6 +14,7 @@ import com.vqsv.core.asset.GameAssets
 import com.vqsv.core.asset.SpriteAnimator
 import com.vqsv.core.model.GameState
 import com.vqsv.core.net.PacketListener
+import com.vqsv.core.net.RestClient
 
 class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
@@ -35,6 +36,12 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private var selectedAction = 0  // 0=Attack 1=UseItem 2=Catch 3=Run
     private var waitingForServer = false
+
+    // --- item picker (for Use-item / Catch, which need an itemId) ---
+    private var pickingItem = false
+    private var pickAction = 0
+    private var invItems: List<RestClient.InventoryItem> = emptyList()
+    private var invSelected = 0
     private var playerHp = GameState.battlePlayerHp
     private var enemyHp = GameState.battleEnemyHp
 
@@ -174,9 +181,39 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         font.color = Color.WHITE
 
         batch.end()
+
+        if (pickingItem) drawItemPicker(sw, sh)
+    }
+
+    private fun drawItemPicker(sw: Float, sh: Float) {
+        val rowH = 30f
+        val boxX = sw * 0.15f; val boxW = sw * 0.7f
+        val boxTop = sh * 0.7f
+        shapeRenderer.projectionMatrix = hudCam.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Color(0f, 0f, 0f, 0.85f)
+        shapeRenderer.rect(boxX, boxTop - invItems.size * rowH - 10f, boxW, invItems.size * rowH + 40f)
+        invItems.forEachIndexed { i, _ ->
+            val y = boxTop - i * rowH
+            shapeRenderer.color = if (i == invSelected) Color(0.2f, 0.3f, 0.6f, 1f) else Color(0.15f, 0.15f, 0.18f, 1f)
+            shapeRenderer.rect(boxX + 6f, y - rowH + 6f, boxW - 12f, rowH - 6f)
+        }
+        shapeRenderer.end()
+
+        batch.projectionMatrix = hudCam.combined
+        batch.begin()
+        font.color = Color.GOLD
+        font.draw(batch, if (pickAction == 2) "Chon Tat de bat:" else "Chon thuoc:", boxX + 8f, boxTop + 28f)
+        font.color = Color.WHITE
+        invItems.forEachIndexed { i, it ->
+            val y = boxTop - i * rowH
+            font.draw(batch, "${it.name} x${it.quantity}", boxX + 14f, y - 8f)
+        }
+        batch.end()
     }
 
     private fun handleInput() {
+        if (pickingItem) { handlePicker(); return }
         if (waitingForServer) return
         if (Gdx.input.isKeyJustPressed(Keys.LEFT))  selectedAction = ((selectedAction - 1 + 4) % 4)
         if (Gdx.input.isKeyJustPressed(Keys.RIGHT)) selectedAction = (selectedAction + 1) % 4
@@ -189,9 +226,40 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private fun doAction() {
         val battleId = GameState.currentBattleId ?: return
-        game.tcp.sendBattleAct(battleId, selectedAction)
-        waitingForServer = true
-        if (selectedAction == 0) playerAttackTimer = 0.45f   // play attack animation
+        when (selectedAction) {
+            0 -> { game.tcp.sendBattleAct(battleId, 0); waitingForServer = true; playerAttackTimer = 0.45f }
+            3 -> { game.tcp.sendBattleAct(battleId, 3); waitingForServer = true }
+            1 -> openItemPicker(1, "MEDICINE")
+            2 -> openItemPicker(2, "CATCH_BALL")
+        }
+    }
+
+    private fun openItemPicker(action: Int, type: String) {
+        pickAction = action
+        game.rest.getInventory(GameState.token) { list, err ->
+            Gdx.app.postRunnable {
+                if (err != null) { GameState.battleLog.add("Loi tui do: $err"); return@postRunnable }
+                invItems = (list ?: emptyList()).filter { it.itemType == type && it.quantity > 0 }
+                invSelected = 0
+                if (invItems.isEmpty())
+                    GameState.battleLog.add(if (action == 2) "Khong co Tat de bat!" else "Khong co thuoc!")
+                else pickingItem = true
+            }
+        }
+    }
+
+    private fun handlePicker() {
+        if (Gdx.input.isKeyJustPressed(Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Keys.BACK)) { pickingItem = false; return }
+        if (invItems.isEmpty()) { pickingItem = false; return }
+        if (Gdx.input.isKeyJustPressed(Keys.UP)) invSelected = (invSelected - 1 + invItems.size) % invItems.size
+        if (Gdx.input.isKeyJustPressed(Keys.DOWN)) invSelected = (invSelected + 1) % invItems.size
+        if (Gdx.input.isKeyJustPressed(Keys.ENTER) || Gdx.input.isKeyJustPressed(Keys.SPACE)) {
+            val item = invItems.getOrNull(invSelected) ?: return
+            val battleId = GameState.currentBattleId ?: return
+            game.tcp.sendBattleAct(battleId, pickAction, item.itemId)
+            waitingForServer = true
+            pickingItem = false
+        }
     }
 
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {
