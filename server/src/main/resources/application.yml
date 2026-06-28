@@ -33,11 +33,14 @@ server:
 vqsv:
   jwt:
     secret: ${JWT_SECRET:vqsv-super-secret-key-change-in-production}
-    expiration-ms: 86400000
+    expiration-ms: 86400000 # 24h
+  admin:
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
   tcp:
-    port: ${TCP_PORT:9090}
+    port: ${TCP_PORT:9090} # J2ME binary gateway port
   game:
-    tick-rate-ms: 100
+    tick-rate-ms: 100         # game loop 10 tick/s
     max-players-per-map: 50
     pet-max-level: 100
     base-exp-per-level: 100
