@@ -1,0 +1,262 @@
+-- V3__seed_original_pets_skills.sql
+-- Reseed VQSV DB with REAL species (100) + skills (70) decoded from the original game.
+-- Switches stat model to the original linear formula via new coefficient columns.
+-- GENERATED FILE (see tools/asset-extractor) -- safe to regenerate.
+
+-- ============================================================
+-- (a) New coefficient columns on pet_templates
+-- ============================================================
+-- Widen name: original Vietnamese names use NFD (decomposed) Unicode, so some
+-- 26-glyph names exceed 32 code points. VARCHAR(64) gives ample headroom.
+ALTER TABLE pet_templates ALTER COLUMN name TYPE VARCHAR(64);
+
+ALTER TABLE pet_templates
+    ADD COLUMN element_id SMALLINT NOT NULL DEFAULT 0,
+    ADD COLUMN hp_base INT NOT NULL DEFAULT 0,
+    ADD COLUMN hp_per INT NOT NULL DEFAULT 0,
+    ADD COLUMN hp_flat INT NOT NULL DEFAULT 0,
+    ADD COLUMN atk_base INT NOT NULL DEFAULT 0,
+    ADD COLUMN atk_per INT NOT NULL DEFAULT 0,
+    ADD COLUMN atk_flat INT NOT NULL DEFAULT 0,
+    ADD COLUMN def_base INT NOT NULL DEFAULT 0,
+    ADD COLUMN def_per INT NOT NULL DEFAULT 0,
+    ADD COLUMN def_flat INT NOT NULL DEFAULT 0,
+    ADD COLUMN spd_base INT NOT NULL DEFAULT 0,
+    ADD COLUMN spd_per INT NOT NULL DEFAULT 0,
+    ADD COLUMN spd_flat INT NOT NULL DEFAULT 0,
+    ADD COLUMN world_ability SMALLINT NOT NULL DEFAULT 0,
+    ADD COLUMN base_grade SMALLINT NOT NULL DEFAULT 1,
+    ADD COLUMN max_grade SMALLINT NOT NULL DEFAULT 5,
+    ADD COLUMN rarity SMALLINT NOT NULL DEFAULT 0,
+    ADD COLUMN skill_elem SMALLINT NOT NULL DEFAULT 0;
+
+-- ============================================================
+-- (b) grade column on player_pets
+-- ============================================================
+ALTER TABLE player_pets ADD COLUMN grade SMALLINT NOT NULL DEFAULT 3;
+
+-- ============================================================
+-- (c) skills table
+-- ============================================================
+CREATE TABLE skills (
+    id             SMALLINT     PRIMARY KEY,
+    name           VARCHAR(64)  NOT NULL,
+    description    TEXT,
+    element        SMALLINT     NOT NULL,
+    required_level SMALLINT     NOT NULL DEFAULT 1,
+    sp_cost        SMALLINT     NOT NULL DEFAULT 0,
+    power          SMALLINT     NOT NULL DEFAULT 0,
+    effect_id      SMALLINT,
+    behavior_flag  SMALLINT     NOT NULL DEFAULT 0,
+    target_code    SMALLINT     NOT NULL DEFAULT 0
+);
+
+-- ============================================================
+-- (d) Clear old seed (FK-safe) and reseed pet_templates
+-- ============================================================
+DELETE FROM map_wild_pets;
+DELETE FROM player_pets;
+DELETE FROM pet_templates;
+
+INSERT INTO pet_templates (id, name, sprite_id, element, base_hp, base_atk, base_def, base_spd, growth_hp, growth_atk, growth_def, growth_spd, catch_rate, evolve_into, evolve_lv, description, element_id, hp_base, hp_per, hp_flat, atk_base, atk_per, atk_flat, def_base, def_per, def_flat, spd_base, spd_per, spd_flat, world_ability, base_grade, max_grade, rarity, skill_elem) VALUES
+  (1, 'Nhiên Dực Bức', 0, 'WOOD', 19, 3, 1, 6, 1.0, 1.0, 1.0, 1.0, 30, 87, 20, 'Nhiên Dực Bức', 0, 19, 15, -1, 3, 5, 0, 1, 20, -1, 6, 4, 0, 4, 1, 4, 1, 0),
+  (2, 'Bom tinh nghịch', 1, 'WOOD', 20, 4, 1, 4, 1.0, 1.0, 1.0, 1.0, 40, 88, 20, 'Bom tinh nghịch', 0, 20, 15, 0, 4, 5, -3, 1, 20, -1, 4, 3, 0, 0, 1, 4, 0, 0),
+  (3, 'Nhiên Liệp Sư', 2, 'WOOD', 24, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 30, 89, 20, 'Nhiên Liệp Sư', 0, 24, 18, 2, 4, 6, 2, 3, 20, 0, 4, 4, 0, 0, 1, 4, 1, 0),
+  (4, 'Hắc Thán Báo', 3, 'WOOD', 25, 4, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, 90, 20, 'Hắc Thán Báo', 0, 25, 19, 5, 4, 6, 3, 2, 20, 0, 5, 4, 0, 0, 1, 4, 0, 0),
+  (5, 'Hỏa Diễm Hồ', 4, 'WOOD', 21, 2, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, 91, 20, 'Hỏa Diễm Hồ', 0, 21, 14, 3, 2, 5, 0, 2, 20, 0, 6, 4, 0, 0, 1, 4, 0, 0),
+  (6, 'Viêm Ma', 5, 'WOOD', 25, 4, 3, 3, 1.0, 1.0, 1.0, 1.0, 30, 92, 20, 'Viêm Ma', 0, 25, 20, 5, 4, 5, 3, 3, 20, 2, 3, 2, 0, 0, 3, 4, 1, 0),
+  (7, 'Long bảo bối', 6, 'WOOD', 22, 2, 1, 4, 1.0, 1.0, 1.0, 1.0, 40, 93, 20, 'Long bảo bối', 0, 22, 17, 2, 2, 4, 2, 1, 20, 1, 4, 3, 0, 6, 1, 4, 0, 0),
+  (8, 'Phệ Hỏa Thú', 7, 'WOOD', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, 94, 20, 'Phệ Hỏa Thú', 0, 24, 18, 4, 3, 5, 3, 2, 20, 2, 4, 4, 0, 1, 1, 4, 0, 0),
+  (9, 'Bạo Long Thú', 8, 'WOOD', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, 95, 20, 'Bạo Long Thú', 0, 26, 21, 6, 4, 6, 4, 3, 20, 3, 4, 4, 0, 2, 1, 4, 0, 0),
+  (10, 'Ly Ngưu Ngưu', 9, 'WOOD', 28, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, 96, 20, 'Ly Ngưu Ngưu', 0, 28, 24, 0, 3, 5, -3, 3, 30, 0, 3, 2, 0, 0, 1, 4, 0, 0),
+  (11, 'Ly Ngưu Thản Khắc', 10, 'WOOD', 30, 3, 3, 2, 1.0, 1.0, 1.0, 1.0, 40, 97, 20, 'Ly Ngưu Thản Khắc', 0, 30, 25, 0, 3, 5, -1, 3, 30, 3, 2, 2, 0, 1, 1, 4, 0, 0),
+  (12, 'Nhiệt Bạo Phong Tốc Khuyển', 11, 'WOOD', 22, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, 98, 20, 'Nhiệt Bạo Phong Tốc Khuyển', 0, 22, 19, 2, 5, 6, 5, 2, 20, 4, 7, 4, 0, 0, 2, 4, 0, 0),
+  (13, 'Tuyệt Đối Linh Độ Khuyển', 12, 'WOOD', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 40, 99, 20, 'Tuyệt Đối Linh Độ Khuyển', 0, 22, 11, 2, 5, 8, 0, 2, 10, 2, 8, 4, 0, 3, 2, 5, 0, 0),
+  (14, 'Hỏa Diễm Tường Vân Khuyển', 13, 'WOOD', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, 100, 20, 'Hỏa Diễm Tường Vân Khuyển', 0, 24, 18, 5, 5, 6, -1, 2, 20, 2, 6, 4, 0, 0, 3, 5, 0, 0),
+  (15, 'Tà Vân Khuyển Thần', 14, 'WOOD', 24, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tà Vân Khuyển Thần', 0, 24, 11, 5, 5, 8, 2, 2, 10, 1, 7, 4, 0, 3, 3, 5, 0, 0),
+  (16, 'Hỏa Phượng Hoàng', 15, 'WOOD', 100, 8, 10, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Hỏa Phượng Hoàng', 0, 100, 30, 0, 8, 8, 10, 10, 30, 6, 6, 4, 0, 5, 5, 5, 2, 0),
+  (17, 'Diệp Tán Oa', 16, 'EARTH', 19, 3, 1, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Diệp Tán Oa', 1, 19, 15, -1, 3, 5, -3, 1, 20, -1, 4, 4, 0, 6, 1, 4, 0, 1),
+  (18, 'Thụ Tán Oa', 17, 'EARTH', 20, 4, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thụ Tán Oa', 1, 20, 16, 2, 4, 5, -1, 1, 20, 4, 5, 4, 0, 1, 2, 4, 0, 1),
+  (19, 'Long Oa', 18, 'EARTH', 24, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Long Oa', 1, 24, 17, 2, 4, 6, 2, 3, 30, 0, 4, 3, 0, 2, 2, 4, 0, 1),
+  (20, 'Tiên Nhân Cầu Bảo Bảo', 19, 'EARTH', 19, 4, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tiên Nhân Cầu Bảo Bảo', 1, 19, 16, -5, 4, 4, 3, 2, 20, 0, 6, 4, 0, 0, 3, 4, 0, 1),
+  (21, 'Tiên Nhân Chưởng Thú', 20, 'EARTH', 20, 2, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tiên Nhân Chưởng Thú', 1, 20, 13, 3, 2, 5, 0, 2, 20, 5, 5, 4, 0, 1, 3, 5, 0, 1),
+  (22, 'Thiết Tý Phách Vương Thụ', 21, 'EARTH', 24, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thiết Tý Phách Vương Thụ', 1, 24, 22, 5, 4, 6, 3, 3, 30, 2, 4, 2, 0, 2, 3, 5, 0, 1),
+  (23, 'Khẩu Đại Thảo', 22, 'EARTH', 22, 2, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Khẩu Đại Thảo', 1, 22, 18, 2, 2, 4, 2, 1, 20, 1, 5, 5, 0, 0, 1, 3, 0, 1),
+  (24, 'Khốc Tị Mộc Linh', 23, 'EARTH', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Khốc Tị Mộc Linh', 1, 24, 21, 4, 3, 5, 3, 2, 20, 2, 4, 4, 0, 0, 1, 3, 0, 1),
+  (25, 'La Phục Thảo', 24, 'EARTH', 22, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'La Phục Thảo', 1, 22, 17, 6, 4, 5, 4, 3, 20, 3, 4, 3, 0, 0, 1, 3, 0, 1),
+  (26, 'La phục Oa Oa', 25, 'EARTH', 24, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'La phục Oa Oa', 1, 24, 19, 1, 3, 6, -3, 3, 30, 0, 3, 3, 0, 1, 1, 4, 0, 1),
+  (27, 'Tây Quan Tiểu Hương Trư', 26, 'EARTH', 26, 3, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tây Quan Tiểu Hương Trư', 1, 26, 21, 0, 3, 5, -1, 3, 30, 3, 4, 2, 0, 0, 1, 4, 0, 1),
+  (28, 'Trư Lộc Điệp', 27, 'EARTH', 28, 5, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Trư Lộc Điệp', 1, 28, 24, 2, 5, 6, 5, 2, 20, 4, 4, 2, 0, 1, 1, 4, 0, 1),
+  (29, 'Cương Tán Ma Cô', 28, 'EARTH', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Cương Tán Ma Cô', 1, 22, 19, 2, 5, 6, 0, 2, 30, 2, 8, 4, 0, 0, 1, 3, 0, 1),
+  (30, 'Uy Qua Đệ Đệ', 29, 'EARTH', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Uy Qua Đệ Đệ', 1, 24, 21, 5, 5, 6, -2, 2, 20, 2, 6, 3, 0, 0, 1, 3, 1, 1),
+  (31, 'Thảo Diệp Cô', 30, 'EARTH', 24, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Thảo Diệp Cô', 1, 24, 18, 5, 5, 5, 2, 2, 20, 1, 7, 4, 0, 0, 3, 4, 1, 1),
+  (32, 'Linh Quang Lộc', 31, 'EARTH', 120, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Linh Quang Lộc', 1, 120, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 1),
+  (33, 'Kim Chỉ Ốc', 32, 'WATER', 19, 3, 1, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Kim Chỉ Ốc', 2, 19, 15, -1, 3, 5, 0, 1, 20, -1, 4, 2, 0, 0, 1, 3, 0, 2),
+  (34, 'Mèo YeDoon', 33, 'WATER', 20, 4, 1, 4, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Mèo YeDoon', 2, 20, 15, 0, 4, 5, -3, 1, 20, -1, 4, 4, 0, 0, 2, 3, 1, 2),
+  (35, 'Thỏ Di Lặc Bunny', 34, 'WATER', 24, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thỏ Di Lặc Bunny', 2, 24, 18, 2, 4, 6, 2, 3, 20, 0, 4, 4, 0, 0, 1, 4, 0, 2),
+  (36, 'Toản Địa Khâu Dẫn', 35, 'WATER', 25, 4, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Toản Địa Khâu Dẫn', 2, 25, 14, 5, 4, 6, 3, 2, 20, 0, 5, 3, 0, 0, 1, 4, 0, 2),
+  (37, 'Toái nham Khâu Dẫn', 36, 'WATER', 21, 2, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Toái nham Khâu Dẫn', 2, 21, 15, 3, 2, 5, 0, 2, 20, 0, 6, 3, 0, 1, 1, 4, 0, 2),
+  (38, 'Nham Nham Quy', 37, 'WATER', 25, 4, 3, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Nham Nham Quy', 2, 25, 21, 5, 4, 5, 3, 3, 20, 2, 5, 2, 0, 0, 1, 3, 0, 2),
+  (39, 'Kiếm Giáp Hạn Quy', 38, 'WATER', 22, 2, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Kiếm Giáp Hạn Quy', 2, 22, 23, 2, 2, 4, 2, 1, 20, 1, 5, 3, 0, 1, 1, 4, 0, 2),
+  (40, 'Bạch Châm Bảo Bảo', 39, 'WATER', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Bạch Châm Bảo Bảo', 2, 24, 17, 4, 3, 5, 3, 2, 20, 2, 4, 4, 0, 0, 1, 4, 0, 2),
+  (41, 'Hắc Châm Yển Bảo Bảo', 40, 'WATER', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Hắc Châm Yển Bảo Bảo', 2, 26, 11, 6, 4, 8, 4, 3, 10, 3, 4, 3, 0, 3, 3, 5, 0, 2),
+  (42, 'Nham Sơn Long', 41, 'WATER', 28, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 8, NULL, NULL, 'Nham Sơn Long', 2, 28, 24, 0, 3, 5, -3, 3, 30, 0, 3, 2, 0, 0, 1, 4, 3, 2),
+  (43, 'Zombie Nham Sơn Long', 42, 'WATER', 30, 3, 3, 2, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Zombie Nham Sơn Long', 2, 30, 11, 2, 3, 8, -1, 3, 15, 3, 2, 2, 0, 3, 1, 4, 1, 2),
+  (44, 'Thổ Lang Chu Chu', 43, 'WATER', 22, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thổ Lang Chu Chu', 2, 22, 16, 2, 5, 5, 5, 2, 20, 4, 7, 4, 0, 0, 1, 3, 0, 2),
+  (45, 'Độc Lang Chu', 44, 'WATER', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Độc Lang Chu', 2, 22, 15, 2, 5, 10, 0, 2, 10, 2, 8, 4, 0, 1, 1, 4, 0, 2),
+  (46, 'Sừng tê giác bạo long', 45, 'WATER', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Sừng tê giác bạo long', 2, 24, 23, 5, 5, 6, -2, 2, 20, 2, 6, 4, 0, 0, 3, 5, 1, 2),
+  (47, 'Khủng giác bạo long', 46, 'WATER', 24, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Khủng giác bạo long', 2, 24, 10, 5, 5, 10, 2, 2, 10, 1, 7, 4, 0, 3, 3, 5, 1, 2),
+  (48, 'Chiến Thần Đà', 47, 'WATER', 130, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Chiến Thần Đà', 2, 130, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 2),
+  (49, 'Tuyết Cầu Bảo Bảo', 48, 'FIRE', 19, 3, 1, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tuyết Cầu Bảo Bảo', 3, 19, 15, -1, 3, 4, 5, 1, 20, -1, 6, 4, 0, 0, 1, 2, 0, 3),
+  (50, 'Người tuyết', 49, 'FIRE', 20, 4, 1, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Người tuyết', 3, 20, 17, 0, 4, 5, 1, 1, 20, -1, 4, 3, 0, 1, 2, 4, 0, 3),
+  (51, 'Tuyết Sơn Cự Linh', 50, 'FIRE', 24, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tuyết Sơn Cự Linh', 3, 24, 21, 2, 4, 6, 2, 3, 20, 0, 4, 4, 0, 2, 1, 4, 0, 3),
+  (52, 'Thủy thủ chim cánh cụt', 51, 'FIRE', 25, 4, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thủy thủ chim cánh cụt', 3, 25, 23, 5, 4, 4, 3, 2, 20, 0, 5, 4, 0, 6, 1, 4, 0, 3),
+  (53, 'Bá tước chim cánh cụt', 52, 'FIRE', 21, 2, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Bá tước chim cánh cụt', 3, 21, 25, 3, 2, 5, 0, 2, 20, 0, 6, 4, 0, 1, 2, 4, 1, 3),
+  (54, 'Võ thần chim cánh cụt', 53, 'FIRE', 25, 4, 3, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Võ thần chim cánh cụt', 3, 25, 24, 5, 4, 6, 3, 3, 20, 2, 5, 3, 0, 2, 3, 5, 0, 3),
+  (55, 'Lục Hành Điểu', 54, 'FIRE', 22, 2, 1, 7, 1.0, 1.0, 1.0, 1.0, 8, NULL, NULL, 'Lục Hành Điểu', 3, 22, 18, 2, 2, 4, 2, 1, 20, 1, 7, 5, 0, 0, 1, 4, 3, 3),
+  (56, 'Cá Miệng Rộng', 55, 'FIRE', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Cá Miệng Rộng', 3, 24, 21, 4, 3, 5, 3, 2, 20, 2, 4, 2, 0, 0, 1, 3, 0, 3),
+  (57, 'Mực Ma', 56, 'FIRE', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Mực Ma', 3, 26, 24, 6, 4, 6, 4, 3, 20, 3, 4, 3, 0, 4, 1, 4, 1, 3),
+  (58, 'Cá Đèn Lồng', 57, 'FIRE', 28, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Cá Đèn Lồng', 3, 28, 23, 0, 3, 5, -3, 3, 30, 0, 3, 3, 0, 0, 1, 2, 0, 3),
+  (59, 'Thủy Thượng Phiêu', 58, 'FIRE', 30, 3, 3, 7, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Thủy Thượng Phiêu', 3, 30, 26, 0, 3, 5, -1, 3, 20, -10, 7, 4, 0, 4, 2, 5, 1, 3),
+  (60, 'Phi Thứ Hải Mã', 59, 'FIRE', 22, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Phi Thứ Hải Mã', 3, 22, 16, 2, 5, 5, 5, 2, 20, 4, 6, 4, 0, 0, 1, 2, 1, 3),
+  (61, 'Tấn Cá Kiếm', 60, 'FIRE', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tấn Cá Kiếm', 3, 22, 17, 2, 5, 5, 0, 2, 20, 2, 8, 4, 0, 0, 1, 2, 0, 3),
+  (62, 'Cốt Cá Kiếm', 61, 'FIRE', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Cốt Cá Kiếm', 3, 24, 10, 5, 5, 8, -2, 2, 15, 2, 6, 4, 0, 3, 1, 4, 0, 3),
+  (63, 'Độc Giác Kim Ngư', 62, 'FIRE', 24, 5, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Độc Giác Kim Ngư', 3, 24, 19, 5, 5, 5, 2, 2, 20, 1, 5, 4, 0, 0, 1, 3, 0, 3),
+  (64, 'Tương Quân Giải', 63, 'FIRE', 120, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Tương Quân Giải', 3, 120, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 3),
+  (65, 'Lôi Quang Hầu', 64, 'GHOST', 21, 2, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Lôi Quang Hầu', 4, 21, 17, 3, 2, 5, 0, 2, 20, 0, 6, 3, 0, 0, 3, 5, 1, 4),
+  (66, 'Lôi Vân Miêu', 65, 'GHOST', 25, 4, 3, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Lôi Vân Miêu', 4, 25, 15, 5, 4, 4, 3, 3, 20, 2, 7, 4, 0, 0, 1, 2, 0, 4),
+  (67, 'Điện Nhãn Miêu', 66, 'GHOST', 22, 2, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Điện Nhãn Miêu', 4, 22, 17, 2, 2, 5, 2, 1, 20, 1, 5, 5, 0, 1, 2, 4, 0, 4),
+  (68, 'Thân Sĩ Miêu', 67, 'GHOST', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thân Sĩ Miêu', 4, 24, 21, 4, 3, 6, 3, 2, 20, 2, 4, 4, 0, 2, 2, 4, 0, 4),
+  (69, 'Điện Miêu', 68, 'GHOST', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Điện Miêu', 4, 26, 18, 6, 4, 4, 4, 3, 20, 3, 4, 4, 0, 0, 2, 2, 0, 4),
+  (70, 'Thiểm Điện Miêu', 69, 'GHOST', 28, 3, 3, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thiểm Điện Miêu', 4, 28, 21, 0, 3, 5, -3, 3, 30, 0, 6, 5, 0, 1, 2, 4, 0, 4),
+  (71, 'Phù Du Điện Long', 70, 'GHOST', 30, 3, 3, 2, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Phù Du Điện Long', 4, 30, 22, 0, 3, 5, -1, 3, 30, 3, 2, 3, 0, 0, 1, 4, 0, 4),
+  (72, 'Phù Du Quỷ Long', 71, 'GHOST', 22, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Phù Du Quỷ Long', 4, 22, 10, 2, 5, 8, 5, 2, 10, 4, 7, 3, 0, 3, 1, 4, 0, 4),
+  (73, 'Chuột Điện', 72, 'GHOST', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Chuột Điện', 4, 22, 16, 2, 5, 5, 0, 2, 20, 2, 8, 4, 0, 4, 3, 5, 1, 4),
+  (74, 'Chuột Lôi Điện', 73, 'GHOST', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Chuột Lôi Điện', 4, 24, 10, 5, 5, 9, -2, 2, 10, 2, 6, 4, 0, 3, 3, 5, 1, 4),
+  (75, 'Dị Tiểu Hiệp', 74, 'GHOST', 24, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 30, NULL, NULL, 'Dị Tiểu Hiệp', 4, 24, 18, 5, 5, 5, 2, 2, 20, 1, 7, 4, 0, 0, 1, 4, 1, 4),
+  (76, 'Lôi Kỳ Lân', 75, 'GHOST', 90, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Lôi Kỳ Lân', 4, 90, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 4),
+  (77, 'Độc Ba Lợi', 76, 'WIND', 21, 2, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Độc Ba Lợi', 5, 21, 16, 3, 2, 4, 0, 2, 20, 0, 6, 3, 0, 0, 1, 2, 0, 5),
+  (78, 'Kịch Độc Quái', 77, 'WIND', 25, 4, 3, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Kịch Độc Quái', 5, 25, 19, 5, 4, 5, 3, 3, 20, 2, 5, 2, 0, 1, 2, 4, 0, 5),
+  (79, 'Kịch Độc Khủng Thú', 78, 'WIND', 22, 8, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Kịch Độc Khủng Thú', 5, 22, 22, 2, 8, 6, 5, 1, 20, 1, 5, 3, 0, 2, 2, 4, 0, 5),
+  (80, 'Đan nhãn thú', 79, 'WIND', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Đan nhãn thú', 5, 24, 18, 4, 3, 5, 3, 2, 20, 2, 4, 4, 0, 0, 1, 3, 0, 5),
+  (81, 'Độc nhãn quái', 80, 'WIND', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Độc nhãn quái', 5, 26, 21, 6, 4, 6, 4, 3, 20, 3, 4, 3, 0, 1, 2, 4, 0, 5),
+  (82, 'Độc nhãn cự thần', 81, 'WIND', 28, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Độc nhãn cự thần', 5, 28, 24, 0, 3, 7, -3, 3, 30, 0, 3, 2, 0, 2, 2, 4, 0, 5),
+  (83, 'Túi quỷ', 82, 'WIND', 30, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Túi quỷ', 5, 30, 18, 0, 3, 5, -1, 3, 30, 3, 3, 3, 0, 0, 1, 4, 0, 5),
+  (84, 'Thi Đại Quỷ', 83, 'WIND', 22, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Thi Đại Quỷ', 5, 22, 10, 2, 5, 8, 5, 2, 10, 4, 7, 4, 0, 3, 2, 4, 0, 5),
+  (85, 'Kính ma', 84, 'WIND', 22, 5, 2, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Kính ma', 5, 22, 21, 2, 5, 6, 0, 2, 20, 2, 5, 2, 0, 0, 3, 5, 0, 5),
+  (86, 'Phá kính tà linh', 85, 'WIND', 24, 5, 2, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Phá kính tà linh', 5, 24, 10, 5, 5, 9, -2, 2, 10, 2, 4, 2, 0, 3, 3, 5, 0, 5),
+  (87, 'Hư không hành giả', 86, 'WIND', 24, 5, 2, 5, 1.0, 1.0, 1.0, 1.0, 8, NULL, NULL, 'Hư không hành giả', 5, 24, 22, 5, 5, 6, 2, 2, 20, 1, 5, 3, 0, 0, 1, 3, 3, 5),
+  (88, 'Minh vương Long', 87, 'WIND', 140, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Minh vương Long', 5, 140, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 5),
+  (89, 'Lắc lắc', 88, 'ELECTRIC', 21, 2, 2, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Lắc lắc', 6, 21, 14, 3, 2, 5, 0, 2, 20, 0, 3, 2, 0, 0, 1, 4, 0, 6),
+  (90, 'Chim xanh', 89, 'ELECTRIC', 25, 4, 3, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Chim xanh', 6, 25, 21, 5, 4, 5, 3, 3, 20, 2, 5, 4, 0, 4, 1, 4, 0, 6),
+  (91, 'Tai tước', 90, 'ELECTRIC', 22, 2, 1, 5, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tai tước', 6, 22, 9, 2, 2, 7, 2, 1, 10, 1, 5, 5, 0, 3, 1, 4, 0, 6),
+  (92, 'Hải âu', 91, 'ELECTRIC', 24, 3, 2, 4, 1.0, 1.0, 1.0, 1.0, 8, NULL, NULL, 'Hải âu', 6, 24, 21, 4, 3, 5, 3, 2, 20, 2, 4, 4, 0, 0, 1, 4, 3, 6),
+  (93, 'Dực thần', 92, 'ELECTRIC', 26, 4, 3, 4, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Dực thần', 6, 26, 24, 6, 4, 6, 4, 3, 20, 3, 4, 4, 0, 1, 1, 4, 0, 6),
+  (94, 'Hồng nhạn', 93, 'ELECTRIC', 28, 3, 3, 3, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Hồng nhạn', 6, 28, 24, 0, 3, 5, -3, 3, 30, 0, 3, 4, 0, 0, 1, 4, 0, 6),
+  (95, 'Phi Dực Thú', 94, 'ELECTRIC', 30, 3, 2, 2, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Phi Dực Thú', 6, 30, 10, 0, 3, 8, -1, 2, 10, 3, 2, 4, 0, 3, 1, 4, 0, 6),
+  (96, 'Đậu ưng', 95, 'ELECTRIC', 22, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Đậu ưng', 6, 22, 19, 2, 5, 5, 5, 2, 20, 4, 7, 4, 0, 4, 1, 4, 0, 6),
+  (97, 'Liệt ưng', 96, 'ELECTRIC', 22, 5, 2, 8, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Liệt ưng', 6, 22, 22, 2, 5, 6, 0, 2, 20, 2, 8, 4, 0, 1, 3, 5, 0, 6),
+  (98, 'Quáng thạch dực long', 97, 'ELECTRIC', 24, 5, 2, 6, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Quáng thạch dực long', 6, 24, 18, 5, 5, 6, -2, 2, 20, 2, 6, 4, 0, 0, 3, 5, 0, 6),
+  (99, 'Tà ma dực long', 98, 'ELECTRIC', 24, 5, 2, 7, 1.0, 1.0, 1.0, 1.0, 40, NULL, NULL, 'Tà ma dực long', 6, 24, 11, 5, 5, 8, 2, 2, 10, 1, 7, 4, 0, 3, 3, 5, 0, 6),
+  (100, 'Tinh Vân Hạc', 99, 'ELECTRIC', 80, 8, 9, 6, 1.0, 1.0, 1.0, 1.0, 15, NULL, NULL, 'Tinh Vân Hạc', 6, 80, 30, 0, 8, 8, 10, 9, 30, 6, 6, 4, 0, 0, 5, 5, 2, 6);
+
+-- Keep the id sequence past the explicitly-seeded ids so future inserts continue at 101.
+SELECT setval(pg_get_serial_sequence('pet_templates','id'), 100, true);
+
+-- ============================================================
+-- (e) Reseed skills
+-- ============================================================
+INSERT INTO skills (id, name, description, element, required_level, sp_cost, power, effect_id, behavior_flag, target_code) VALUES
+  (0, 'Hỏa trảo', 'Thương tổn thấp.', 0, 1, 45, 0, NULL, 0, 0),
+  (1, 'Dương viêm', 'Thương tổn thấp tăng thêm hiệu quả đốt cháy, mỗi hiệp sẽ giảm bớt trị số sinh mạng nhất định, duy trì liên tục 3 hiệp.', 0, 1, 45, 4, 0, 2, 0),
+  (2, 'Diễm kích', 'Thương tổn thấp, cũng có 10% xác suất lâm vào trạng thái Mê Muội 2 hiệp.', 0, 1, 45, 10, 1, 2, 0),
+  (3, 'Hỏa Vân triệu', 'Thương tổn thấp, nếu đối phương đang cháy thì sẽ gia tăng được thương tổn trên người đối phương.', 0, 1, 30, 120, NULL, 0, 0),
+  (4, 'Thiên Hỏa tế', 'Tăng khả năng phòng ngự 30%, vòng chiến đấu tiếp theo sẽ gia tăng thương tổn.', 0, 1, 10, 0, 0, 1, 1),
+  (5, 'Viêm lôi phá', 'Khả năng phòng ngự giảm xuống 50%, Gia tăng tỷ lệ thương tổn 50%, duy trì liên tục 3 hiệp.', 0, 1, 10, 0, 1, 1, 1),
+  (6, 'Hỏa diễm đao', 'Tỷ lệ thương tổn gia tăng khá cao.', 0, 2, 30, 0, NULL, 0, 0),
+  (7, 'Chước nhiệt chi xúc', 'Thương tổn thấp làm tăng hiệu quả đốt cháy, mỗi hiệp giảm bớt được trị số sinh mạng nhất định, duy trì liên tục 3 hiệp.', 0, 2, 30, 3, 0, 2, 0),
+  (8, 'Liệt diễm phong bạo', 'Thương tổn cao, cũng có 20% xác suất lâm vào trạng thái Mê Muội 2 hiệp.', 0, 3, 15, 20, 1, 2, 0),
+  (9, 'Vĩnh hằng hỏa ảnh', 'Thương tổn cao, nếu kẻ địch đang cháy thì tỷ lệ thương tổn trên người sẽ gia tăng.', 0, 3, 15, 250, NULL, 0, 0),
+  (10, 'Diệp Toàn', 'Thương tổn thấp.', 1, 1, 45, 0, NULL, 0, 0),
+  (11, 'Quang phản', 'Thương tổn thấp, có thể khôi phục trị số sinh mạng nhất định.', 1, 1, 45, 10, NULL, 0, 0),
+  (12, 'Đằng Phược', 'Thương tổn thấp, cũng đem Quấn Quanh 3 hiệp.', 1, 1, 45, 0, 2, 2, 0),
+  (13, 'Thảo Chủng', 'Thương tổn thấp, kẻ địch rơi vào trạng thái Thực Loại, sau 2 hiệp tạo thành thương tổn tương đối cao.', 1, 1, 30, 150, 3, 2, 0),
+  (14, 'Đằng chi bích lũy', 'Gia tăng khả năng phòng ngự 30% thương tổn cũng dội ngược trở lại, duy trì liên tục 3 hiệp.', 1, 1, 10, 0, 2, 1, 1),
+  (15, 'Thảo nguyện thuật', 'Mỗi hiệp khôi phục trị số sinh mạng nhất định, duy trì liên tục 3 hiệp.', 1, 1, 10, 0, 3, 1, 1),
+  (16, 'Châm Diệp Trảm', 'Tỷ lệ thương tổn gia tăng khá cao.', 1, 2, 30, 0, NULL, 0, 0),
+  (17, 'Diệp chi ân huệ', 'Thương tổn ở mức độ trung bình, cũng có thể khôi phục trị số sinh mạng nhất định.', 1, 2, 30, 40, NULL, 0, 0),
+  (18, 'Đằng mạn triền nhiễu', 'Thương tổn tương đối cao, cũng đem Quấn Quanh 3 hiệp.', 1, 3, 15, 0, 2, 2, 0),
+  (19, 'Quang hợp hiệu ứng', 'Thương tổn tương đối cao, kẻ địch rơi vào trạng thái Thực Loại, sau 2 hiệp tạo thành Thương tổn cao.', 1, 3, 15, 200, 3, 2, 0),
+  (20, 'Hất bụi', 'Thương tổn thấp.', 2, 1, 45, 0, NULL, 0, 0),
+  (21, 'Thổ thuẫn', 'Thương tổn thấp, có khả năng tự gia tăng phòng ngự 10%(có thể chất chồng).', 2, 1, 45, 10, 4, 1, 0),
+  (22, 'Bão cát', 'Thương tổn thấp cũng có 25% xác suất lâm vào trạng thái Mê Muội 2 hiệp.', 2, 1, 45, 25, 1, 2, 0),
+  (23, 'Nham băng', 'Thương tổn thấp, kẻ địch rơi vào trạng thái Mê Muội, tạo thành thương tổn cực lớn.', 2, 1, 30, 250, NULL, 0, 0),
+  (24, 'Người bảo vệ Địa Giới', 'Giải phóng những vùng có trạng thái dị thường, mỗi hiệp khôi phục trị số sinh mạng nhất định, duy trì liên tục 3 hiệp.', 2, 1, 10, 0, 13, 1, 1),
+  (25, 'Thạch phu thuật', 'Giải phóng những vùng có trạng thái dị thường, 3 hiệp có khả năng miễn dịch ở những nơi có trạng thái dị thường.', 2, 1, 10, 0, 14, 1, 1),
+  (26, 'Nham bạo', 'Thương tổn ở mức độ trung bình.', 2, 2, 30, 0, NULL, 0, 0),
+  (27, 'Hàng rào cát đá', 'Thương tổn thấp, khả năng tự gia tăng phòng ngự 10%(có thể chất chồng).', 2, 2, 30, 10, 4, 1, 0),
+  (28, 'Bão cát', 'Thương tổn ở mức độ trung bình cũng có 25% xác suất lâm vào trạng thái Mê Muội 2 hiệp.', 2, 3, 15, 25, 1, 2, 0),
+  (29, 'Thổ Chi Loạn Vũ', 'Thương tổn tương đối cao, kẻ địch rơi vào trạng thái Mê Muội, Gia tăng tỷ lệ thương tổn.', 2, 3, 15, 300, NULL, 0, 0),
+  (30, 'Bong bóng', 'Thương tổn thấp.', 3, 1, 45, 0, NULL, 0, 0),
+  (31, 'Băng lao', 'Thương tổn thấp cũng làm giảm tỉ lệ đánh trúng mục tiêu, duy trì liên tục 3 hiệp.', 3, 1, 45, 1, 4, 2, 0),
+  (32, 'Tuyết ảnh', 'Thương tổn thấp cũng làm giảm hiệu quả công kích kẻ địch 10% Linh Xảo, duy trì liên tục 3 hiệp.', 3, 1, 45, 10, 5, 2, 0),
+  (33, 'Thủy trụ', 'Thương tổn thấp cũng làm giảm hiệu quả công kích kẻ địch 10% thương tổn, duy trì liên tục 3 hiệp.', 3, 1, 30, 10, 6, 2, 0),
+  (34, 'Thuật cầu nguyện', '30% xác suất bắn ngược thương tổn, duy trì liên tục 3 hiệp.', 3, 1, 10, 0, 5, 1, 1),
+  (35, 'Thủy bích', '50% xác suất gây thương tổn cho kẻ địch bị giảm phân nửa, duy trì liên tục 3 hiệp.', 3, 1, 10, 0, 6, 1, 1),
+  (36, 'Bạo Phong Tuyết', 'Tỷ lệ thương tổn gia tăng khá cao.', 3, 2, 30, 0, NULL, 0, 0),
+  (37, 'Lá chắn gió tuyết', 'Thương tổn thấp cũng làm giảm tỉ lệ đánh trúng mục tiêu, duy trì liên tục 3 hiệp.', 3, 2, 30, 2, 4, 2, 0),
+  (38, 'Băng Phong Hãm Tịnh', 'Thương tổn tương đối cao cũng làm giảm hiệu quả công kích kẻ địch 10% Linh Xảo, duy trì liên tục 3 hiệp.', 3, 3, 15, 10, 5, 2, 0),
+  (39, 'Ray lạnh', 'Thương tổn tương đối cao cũng làm giảm hiệu quả công kích kẻ địch 10% thương tổn, duy trì liên tục 3 hiệp.', 3, 3, 15, 10, 6, 2, 0),
+  (40, 'Điện giật', 'Thương tổn thấp.', 4, 1, 45, 0, NULL, 0, 0),
+  (41, 'Lôi thiểm', 'Thương tổn thấp cũng làm giảm 10% xác suất làm kẻ địch Tê Liệt 3 hiệp.', 4, 1, 45, 10, 10, 2, 0),
+  (42, 'Nạp điện', 'Thương tổn thấp, khả năng tự Linh Xảo gia tăng 5%.', 4, 1, 45, 5, 7, 1, 0),
+  (43, 'Sóng điện từ', 'Thương tổn thấp cũng có thể làm giảm mặt lợi ích của bản thân đối với kẻ địch.', 4, 1, 30, 0, NULL, 0, 0),
+  (44, 'Đoạt mệnh cao áp', 'Số lần tiêu hao kỹ năng tăng gấp bội, Gia tăng tỷ lệ thương tổn 30%, duy trì liên tục 3 hiệp.', 4, 1, 10, 0, 8, 1, 1),
+  (45, 'Điện năng chuyển đổi', 'Linh Xảo gia tăng 50%, phòng ngự giảm xuống 50%, duy trì liên tục 3 hiệp.', 4, 1, 10, 0, 9, 1, 1),
+  (46, 'Tia lửa điện', 'Tỷ lệ thương tổn gia tăng khá cao.', 4, 2, 30, 0, NULL, 0, 0),
+  (47, 'Chùm sấm sét', 'Thương tổn ở mức độ trung bình cũng giảm 10% xác suất làm kẻ địch Tê Liệt 3 hiệp.', 4, 2, 30, 10, 10, 2, 0),
+  (48, 'Điện quang thạch hỏa', 'Thương tổn ở mức độ trung bình, Linh Xảo gia tăng 5%.', 4, 3, 15, 5, 7, 1, 0),
+  (49, 'Cảm ứng điện từ', 'Thương tổn cao cũng có thể làm giảm mặt lợi ích của bản thân đối với kẻ địch.', 4, 3, 15, 0, NULL, 0, 0),
+  (50, 'Ảnh thứ', 'Thương tổn thấp.', 5, 1, 45, 0, NULL, 0, 0),
+  (51, 'Chú oán', 'Thương tổn thấp cũng làm giảm hiệu quả công kích kẻ địch 20% phòng ngự, duy trì liên tục 3 hiệp.', 5, 1, 45, 20, 7, 2, 0),
+  (52, 'Quỷ độc', 'Thương tổn thấp cũng có một ít xác suất khôi phục giá trị sinh mệnh.', 5, 1, 45, 5, NULL, 0, 0),
+  (53, 'Cơn ác mộng', 'Thương tổn nhất định, giá trị sinh mệnh kẻ địch càng thấp càng thương tổn cao.', 5, 1, 30, 200, NULL, 0, 0),
+  (54, 'Mị ảnh', '40% xác suất lực công kích của kẻ địch bị dội ngược trở lại, duy trì liên tục 4 hiệp.', 5, 1, 10, 40, 8, 2, 0),
+  (55, 'Hỗn loạn', 'Không bị khống chế, có thể tự do hành động.', 5, 1, 10, 0, 9, 2, 0),
+  (56, 'Độc ảnh thứ', 'Tỷ lệ thương tổn gia tăng khá cao.', 5, 2, 30, 0, NULL, 0, 0),
+  (57, 'Chú Phược Quỷ Lao', 'Thương tổn ở mức độ trung bình cũng làm giảm hiệu quả công kích kẻ địch 20% phòng ngự, duy trì liên tục 3 hiệp.', 5, 2, 30, 20, 7, 2, 0),
+  (58, 'Quỷ độc tín ngưỡng', 'Thương tổn thấp cũng có một ít xác suất khôi phục giá trị sinh mệnh.', 5, 3, 15, 8, NULL, 0, 0),
+  (59, 'Lời nguyền cuối cùng', 'Xuất hiện thương tổn, giá trị sinh mạng của kẻ địch càng thấp, thương tổn càng cao.', 5, 3, 15, 250, NULL, 0, 0),
+  (60, 'Phong nhận', 'Thương tổn thấp.', 6, 1, 45, 0, NULL, 0, 0),
+  (61, 'Phong áp', 'Thương tổn thấp cũng làm giảm hiệu quả công kích kẻ địch 5% Linh Xảo, duy trì liên tục 3 hiệp.', 6, 1, 45, 5, 5, 2, 0),
+  (62, 'Thuận phong', 'Thương tổn thấp, lực lượng tự gia tăng 5%, duy trì liên tục 2 hiệp.', 6, 1, 45, 5, 10, 1, 0),
+  (63, 'Long quyển', 'Thương tổn thấp, có 5% xác suất tiếp tục công kích lần nữa.', 6, 1, 30, 5, NULL, 0, 0),
+  (64, 'Nghịch Phong Đoạt', 'Sử dụng Thâu Thủ đối với kẻ địch để lấy tất cả những trạng thái có lợi sang mình, duy trì liên tục 3 hiệp.', 6, 1, 10, 0, 11, 1, 0),
+  (65, 'Vũ Liệt Thuật', 'Mỗi hiệp công kích hai lần, duy trì liên tục 2 hiệp.', 6, 1, 10, 0, 12, 1, 1),
+  (66, 'Yến Hồi Thiểm', 'Tỷ lệ thương tổn gia tăng khá cao.', 6, 2, 30, 0, NULL, 0, 0),
+  (67, 'Phong Chi Tuyền Qua', 'Thương tổn ở mức độ trung bình cũng làm giảm hiệu quả công kích kẻ địch 5% nhanh nhẹn, duy trì liên tục 3 hiệp.', 6, 2, 30, 5, 5, 2, 0),
+  (68, 'Phong Chi Tí Hữu', 'Thương tổn ở mức độ trung bình, lực lượng tự gia tăng 55, duy trì liên tục 2 hiệp.', 6, 3, 15, 5, 10, 1, 0),
+  (69, 'Phi Yến Hoàn Sào', 'Thương tổn tương đối cao, có 8% xác suất tiếp tục công kích lần nữa.', 6, 3, 15, 8, NULL, 0, 0);
+
+-- ============================================================
+-- (f) Reseed map_wild_pets (distribute by rarity/level across 6 maps)
+-- ============================================================
+INSERT INTO map_wild_pets (map_id, template_id, min_level, max_level, spawn_rate) VALUES
+  (1, 1, 1, 5, 20),
+  (1, 2, 1, 5, 18),
+  (1, 3, 1, 5, 15),
+  (2, 4, 5, 10, 16),
+  (2, 5, 5, 10, 14),
+  (2, 6, 5, 10, 12),
+  (3, 21, 15, 25, 14),
+  (3, 22, 15, 25, 12),
+  (3, 23, 15, 25, 10),
+  (4, 41, 25, 35, 12),
+  (4, 42, 25, 35, 10),
+  (4, 43, 25, 35, 9),
+  (5, 61, 35, 45, 10),
+  (5, 62, 35, 45, 9),
+  (5, 63, 35, 45, 8),
+  (6, 81, 45, 50, 9),
+  (6, 82, 45, 50, 8),
+  (6, 100, 45, 50, 8);
