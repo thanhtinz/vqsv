@@ -191,3 +191,27 @@ java -jar /path/to/microemulator.jar dist/vqsv.jar
 All modern clients default to **landscape (800×480)**.  
 The J2ME client preserves the original **portrait (360×640)** layout.  
 Converting portrait to landscape only requires adjusting UI layout coordinates — sprite assets and map tiles are orientation-agnostic.
+
+---
+
+## Game Assets
+
+The original game's art and data live in custom binary containers inside the
+J2ME JAR. An asset pipeline converts them to open formats for the modern clients.
+
+| Step | Path |
+|------|------|
+| Original JAR (source of truth) | `assets/original/vqsv-original.jar` |
+| Extractor / converter | `tools/asset-extractor/extract.py` |
+| Format reference | `docs/ASSET-FORMATS.md` |
+
+```bash
+cd tools/asset-extractor
+python3 extract.py ../../assets/original/vqsv-original.jar out
+#  -> 309 PNG (img, byte-exact) + spr/map/ui JSON
+```
+
+Inventory: **309** images (PNG), **345** sprite tables, **102** tile maps (23×23),
+**44** UI layouts. Only the JAR + tool are version-controlled; derived assets are
+regenerated on demand, so a game update is just "replace the JAR, re-run the tool".
+See [`assets/original/README.md`](assets/original/README.md) for how to add the JAR.
