@@ -104,6 +104,16 @@ data class PlayerPositionDto(
     val level: Short
 )
 
+data class NpcDto(
+    val id: Short,
+    val name: String,
+    val spriteId: Short,
+    val npcType: String,
+    val posX: Short,
+    val posY: Short,
+    val enemyTemplateId: Short?
+)
+
 data class ShopItemDto(
     val id: Int,
     val itemId: Short,

@@ -28,7 +28,11 @@ data class Npc(
     var posY: Short = 0,
 
     @Column(name = "dialog_key", length = 64)
-    var dialogKey: String? = null
+    var dialogKey: String? = null,
+
+    // For BATTLE_TRAINER NPCs: the enemy template this trainer fights with.
+    @Column(name = "enemy_template_id")
+    var enemyTemplateId: Short? = null
 )
 
 // Enemy template (npc_enemy_templates from V1) — boss/trainer enemy stats.

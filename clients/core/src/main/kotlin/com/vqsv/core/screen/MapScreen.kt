@@ -36,6 +36,9 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     private class Other(val name: String, val mapId: Int, val x: Int, val y: Int)
     private val others = HashMap<Long, Other>()  // other players' live positions
 
+    // BATTLE_TRAINER NPCs on the current map (walk up to duel them).
+    private val trainers = ArrayList<com.vqsv.core.net.RestClient.NpcInfo>()
+
     private var pvpInviteFrom: Long? = null       // pending PvP invite (challenger id)
     private var pvpInviteName: String = ""
 
@@ -49,7 +52,24 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         game.tcp.listener = this
         resize(Gdx.graphics.width, Gdx.graphics.height)
         if (GameAssets.available()) tileMap = TileMap.load(GameState.mapId)
+        loadTrainers()
     }
+
+    /** Fetch BATTLE_TRAINER NPCs for the current map so they can be drawn and dueled. */
+    private fun loadTrainers() {
+        game.rest.getNpcs(GameState.token, GameState.mapId) { list, _ ->
+            Gdx.app.postRunnable {
+                trainers.clear()
+                if (list != null) trainers.addAll(list.filter { it.npcType == "BATTLE_TRAINER" })
+            }
+        }
+    }
+
+    /** The trainer the player is standing on or next to, if any. */
+    private fun adjacentTrainer(): com.vqsv.core.net.RestClient.NpcInfo? =
+        trainers.firstOrNull {
+            Math.abs(it.posX - GameState.posX) <= 1 && Math.abs(it.posY - GameState.posY) <= 1
+        }
 
     override fun render(delta: Float) {
         Gdx.gl.glClearColor(0.08f, 0.10f, 0.12f, 1f)
@@ -65,6 +85,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             // Player marker in the same y-down space.
             shape.projectionMatrix = worldCam.combined
             shape.begin(ShapeRenderer.ShapeType.Filled)
+            shape.color = Color.ORANGE
+            trainers.forEach { shape.rect(it.posX * tile.toFloat(), it.posY * tile.toFloat(), tile.toFloat(), tile.toFloat()) }
             shape.color = Color.MAGENTA
             others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * tile.toFloat(), it.y * tile.toFloat(), tile.toFloat(), tile.toFloat()) }
             shape.color = Color.CYAN
@@ -78,6 +100,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
                 shape.color = if ((row + col) % 2 == 0) Color(0.2f, 0.6f, 0.2f, 1f) else Color(0.15f, 0.5f, 0.15f, 1f)
                 shape.rect(col * PLACEHOLDER_TILE, row * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
             }
+            shape.color = Color.ORANGE
+            trainers.forEach { shape.rect(it.posX * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.posY) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE) }
             shape.color = Color.MAGENTA
             others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.y) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE) }
             shape.color = Color.CYAN
@@ -97,7 +121,13 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             font.draw(batch, "Online: " + onlineHere.joinToString(", ") { it.name }.take(60), 6f, h - 24f)
             font.color = Color.WHITE
         }
-        font.draw(batch, "WASD | P:Shop B:Tui M:Menu T:Chat F:PvP G:Dau NPC", 6f, 22f)
+        font.draw(batch, "WASD | P:Shop B:Tui M:Menu T:Chat F:PvP", 6f, 22f)
+        // Contextual trainer prompt (original walk-up-to-fight behaviour).
+        adjacentTrainer()?.let {
+            font.color = Color.ORANGE
+            font.draw(batch, "G: Giao dau voi ${it.name}", 6f, 40f)
+            font.color = Color.WHITE
+        }
         // Chat log (recent messages).
         font.color = Color(0.8f, 0.9f, 1f, 1f)
         chatLog.forEachIndexed { i, line ->
@@ -124,9 +154,12 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             if (Gdx.input.isKeyJustPressed(Keys.Y)) { game.tcp.sendPvpRespond(cid, true); pvpInviteFrom = null; return }
             if (Gdx.input.isKeyJustPressed(Keys.N)) { game.tcp.sendPvpRespond(cid, false); pvpInviteFrom = null; return }
         }
-        // G: duel an NPC trainer on this map (original offline trainer battle).
+        // G: duel the NPC trainer you are standing next to (walk up to fight).
         if (Gdx.input.isKeyJustPressed(Keys.G)) {
-            game.tcp.sendStartTrainer(); chatLog.add("Tim huan luyen vien de giao dau..."); return
+            val t = adjacentTrainer()
+            if (t != null) { game.tcp.sendStartTrainer(t.id); chatLog.add("Giao dau voi ${t.name}!") }
+            else chatLog.add("Hay den gan mot huan luyen vien")
+            return
         }
         // F: challenge the nearest other player on this map to PvP.
         if (Gdx.input.isKeyJustPressed(Keys.F)) {

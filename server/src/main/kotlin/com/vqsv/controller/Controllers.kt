@@ -38,12 +38,21 @@ class AuthController(private val authService: AuthService) {
 @RequestMapping("/api/player")
 class PlayerController(
     private val jwtUtil: JwtUtil,
-    private val mapService: MapService
+    private val mapService: MapService,
+    private val npcRepo: com.vqsv.repository.NpcRepository
 ) {
     @GetMapping("/map")
     fun getMapState(auth: Authentication): ResponseEntity<MapStateDto> {
         val playerId = (auth.principal as Long)
         return ResponseEntity.ok(mapService.getMapState(playerId))
+    }
+
+    @GetMapping("/npcs/{mapId}")
+    fun getNpcs(@PathVariable mapId: Short): ResponseEntity<List<NpcDto>> {
+        val npcs = npcRepo.findByMapId(mapId).map {
+            NpcDto(it.id, it.name, it.spriteId, it.npcType, it.posX, it.posY, it.enemyTemplateId)
+        }
+        return ResponseEntity.ok(npcs)
     }
 
     @PostMapping("/move")

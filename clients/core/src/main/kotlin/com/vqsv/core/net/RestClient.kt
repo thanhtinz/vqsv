@@ -62,6 +62,16 @@ class RestClient(private val baseUrl: String) {
         val description: String? = null
     )
 
+    data class NpcInfo(
+        val id: Int = 0,
+        val name: String = "",
+        val spriteId: Int = 0,
+        val npcType: String = "",
+        val posX: Int = 0,
+        val posY: Int = 0,
+        val enemyTemplateId: Int? = null
+    )
+
     private val client = OkHttpClient()
     private val gson = Gson()
     private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -107,6 +117,16 @@ class RestClient(private val baseUrl: String) {
             if (err != null) { cb(null, err); return@get }
             try {
                 val type = object : TypeToken<List<ShopItem>>() {}.type
+                cb(gson.fromJson(body, type), null)
+            } catch (e: Exception) { cb(null, e.message) }
+        }
+    }
+
+    fun getNpcs(token: String, mapId: Int, cb: (List<NpcInfo>?, String?) -> Unit) {
+        get("$baseUrl/api/player/npcs/$mapId", token) { body, err ->
+            if (err != null) { cb(null, err); return@get }
+            try {
+                val type = object : TypeToken<List<NpcInfo>>() {}.type
                 cb(gson.fromJson(body, type), null)
             } catch (e: Exception) { cb(null, e.message) }
         }

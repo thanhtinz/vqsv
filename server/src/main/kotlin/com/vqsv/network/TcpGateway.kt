@@ -60,7 +60,7 @@ class TcpGateway(
     private val mapService: MapService,
     private val battleService: BattleService,
     private val pvpService: com.vqsv.game.battle.PvpService,
-    private val npcEnemyTemplateRepo: com.vqsv.repository.NpcEnemyTemplateRepository,
+    private val npcRepo: com.vqsv.repository.NpcRepository,
     private val jwtUtil: JwtUtil
 ) {
     private val log = LoggerFactory.getLogger(TcpGateway::class.java)
@@ -317,21 +317,32 @@ class TcpGateway(
         }
 
         // ---- NPC trainer duels (original offline trainer battles) ----
+        // The player must be standing on or next to a BATTLE_TRAINER NPC (the
+        // original walk-up-to-fight behaviour). START_TRAINER carries the NPC id;
+        // 0 means "the trainer adjacent to me".
         private fun handleStartTrainer(ctx: ChannelHandlerContext, buf: ByteBuf) {
             val playerId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
             val id = ctx.channel().id()
             val pos = positions[id] ?: intArrayOf(1, 0, 0)
-            val requested = if (buf.readableBytes() >= 2) buf.readShort() else 0
+            val requestedNpc = if (buf.readableBytes() >= 2) buf.readShort() else 0
 
-            // Resolve which trainer to fight: an explicit id, else any trainer on this map.
-            val trainer = if (requested > 0) {
-                npcEnemyTemplateRepo.findById(requested).orElse(null)
+            val mapNpcs = npcRepo.findByMapId(pos[0].toShort())
+                .filter { it.npcType == "BATTLE_TRAINER" }
+            fun adjacent(n: com.vqsv.entity.Npc) =
+                Math.abs(n.posX - pos[1]) <= 1 && Math.abs(n.posY - pos[2]) <= 1
+
+            val npc = if (requestedNpc > 0) {
+                mapNpcs.firstOrNull { it.id == requestedNpc }
             } else {
-                npcEnemyTemplateRepo.findByMapId(pos[0].toShort()).firstOrNull()
+                mapNpcs.firstOrNull { adjacent(it) }
             }
-            if (trainer == null) { sendError(ctx, "Không có huấn luyện viên ở khu vực này"); return }
+            if (npc == null) { sendError(ctx, "Không có huấn luyện viên ở gần đây"); return }
+            if (!adjacent(npc)) { sendError(ctx, "Hãy đến gần huấn luyện viên trước"); return }
 
-            val session = battleService.startTrainerBattle(playerId, trainer.id)
+            val templateId = npc.enemyTemplateId
+                ?: run { sendError(ctx, "Huấn luyện viên này chưa sẵn sàng"); return }
+
+            val session = battleService.startTrainerBattle(playerId, templateId)
 
             // Reuse the wild-encounter frame; catchable = 0 marks it as a duel.
             val resp = ctx.alloc().buffer()
