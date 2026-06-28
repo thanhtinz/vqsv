@@ -22,7 +22,12 @@ import java.util.concurrent.ConcurrentHashMap
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 
+// ============================================================
+// J2ME BINARY PROTOCOL OPCODES
+// Matches original game packet structure (reversed from bytecode)
+// ============================================================
 object Op {
+    // Client -> Server
     const val LOGIN        = 0x01.toByte()
     const val MOVE         = 0x02.toByte()
     const val BATTLE_ACT   = 0x03.toByte()
@@ -31,12 +36,13 @@ object Op {
     const val BUY_ITEM     = 0x06.toByte()
     const val USE_ITEM     = 0x07.toByte()
 
+    // Server -> Client
     const val AUTH_OK      = 0x81.toByte()
     const val AUTH_FAIL    = 0x82.toByte()
     const val MOVE_OK      = 0x83.toByte()
-    const val WILD_ENC     = 0x84.toByte()
+    const val WILD_ENC     = 0x84.toByte()  // wild encounter
     const val BATTLE_TURN  = 0x85.toByte()
-    const val PLAYER_NEAR  = 0x86.toByte()
+    const val PLAYER_NEAR  = 0x86.toByte()  // nearby player update
     const val CHAT_MSG     = 0x87.toByte()
     const val PONG         = 0x88.toByte()
     const val ERROR        = 0xFF.toByte()
@@ -53,6 +59,8 @@ class TcpGateway(
     private val log = LoggerFactory.getLogger(TcpGateway::class.java)
     private val bossGroup = NioEventLoopGroup(1)
     private val workerGroup = NioEventLoopGroup()
+
+    // channel -> playerId for authenticated sessions
     private val sessions = ConcurrentHashMap<ChannelId, Long>()
 
     @PostConstruct
@@ -63,6 +71,7 @@ class TcpGateway(
             .childHandler(object : ChannelInitializer<SocketChannel>() {
                 override fun initChannel(ch: SocketChannel) {
                     ch.pipeline().apply {
+                        // 2-byte length prefix frame
                         addLast(LengthFieldBasedFrameDecoder(65535, 0, 2, 0, 2))
                         addLast(LengthFieldPrepender(2))
                         addLast(GameHandler())
@@ -88,14 +97,15 @@ class TcpGateway(
         override fun channelRead0(ctx: ChannelHandlerContext, msg: ByteBuf) {
             if (!msg.isReadable) return
             val opcode = msg.readByte()
+
             try {
                 when (opcode) {
-                    Op.LOGIN      -> handleLogin(ctx, msg)
-                    Op.MOVE       -> handleMove(ctx, msg)
+                    Op.LOGIN -> handleLogin(ctx, msg)
+                    Op.MOVE  -> handleMove(ctx, msg)
                     Op.BATTLE_ACT -> handleBattleAct(ctx, msg)
-                    Op.CHAT       -> handleChat(ctx, msg)
-                    Op.PING       -> ctx.write(buildPong())
-                    else          -> sendError(ctx, "Unknown opcode 0x${opcode.toString(16)}")
+                    Op.CHAT  -> handleChat(ctx, msg)
+                    Op.PING  -> ctx.write(buildPong())
+                    else     -> sendError(ctx, "Unknown opcode 0x${opcode.toString(16)}")
                 }
             } catch (e: Exception) {
                 log.warn("[WARN] TCP handler error: ${e.message}")
@@ -110,7 +120,9 @@ class TcpGateway(
             val passwordLen = buf.readShort().toInt()
             val password = buf.readBytes(passwordLen).toString(Charsets.UTF_8)
 
-            val result = runCatching { authService.login(LoginRequest(username, password)) }
+            val result = runCatching {
+                authService.login(LoginRequest(username, password))
+            }
 
             if (result.isSuccess) {
                 val auth = result.getOrThrow()
@@ -132,8 +144,11 @@ class TcpGateway(
         }
 
         private fun handleMove(ctx: ChannelHandlerContext, buf: ByteBuf) {
-            val playerId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
-            val direction = when (buf.readByte().toInt()) {
+            val playerId = sessions[ctx.channel().id()] ?: run {
+                sendError(ctx, "Not authenticated"); return
+            }
+            val dirCode = buf.readByte().toInt()
+            val direction = when (dirCode) {
                 0 -> "UP"; 1 -> "DOWN"; 2 -> "LEFT"; 3 -> "RIGHT"
                 else -> { sendError(ctx, "Bad direction"); return }
             }
@@ -142,10 +157,10 @@ class TcpGateway(
             val resp = ctx.alloc().buffer()
 
             if (result.wildEncounter != null) {
-                val enc = result.wildEncounter
                 resp.writeByte(Op.WILD_ENC.toInt())
                 resp.writeByte(result.newX.toInt())
                 resp.writeByte(result.newY.toInt())
+                val enc = result.wildEncounter
                 val battleIdBytes = enc.battleId.toByteArray()
                 resp.writeShort(battleIdBytes.size)
                 resp.writeBytes(battleIdBytes)
@@ -155,6 +170,7 @@ class TcpGateway(
                 resp.writeByte(enc.enemyLevel.toInt())
                 resp.writeShort(enc.enemyHp)
                 resp.writeByte(if (enc.catchable) 1 else 0)
+                resp.writeShort(enc.enemySpriteId.toInt())
             } else {
                 resp.writeByte(Op.MOVE_OK.toInt())
                 resp.writeByte(result.newX.toInt())
@@ -164,15 +180,22 @@ class TcpGateway(
         }
 
         private fun handleBattleAct(ctx: ChannelHandlerContext, buf: ByteBuf) {
-            val playerId = sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
+            val playerId = sessions[ctx.channel().id()] ?: run {
+                sendError(ctx, "Not authenticated"); return
+            }
             val battleIdLen = buf.readShort().toInt()
             val battleId = buf.readBytes(battleIdLen).toString(Charsets.UTF_8)
-            val action = when (buf.readByte().toInt()) {
-                0 -> "ATTACK"; 1 -> "USE_ITEM"; 2 -> "CATCH"; 3 -> "RUN"; else -> "ATTACK"
+            val actionCode = buf.readByte()
+            val action = when (actionCode.toInt()) {
+                0 -> "ATTACK"; 1 -> "USE_ITEM"; 2 -> "CATCH"; 3 -> "RUN"
+                else -> "ATTACK"
             }
             val itemId: Short? = if (buf.readableBytes() >= 2) buf.readShort() else null
 
-            val turnResult = battleService.processTurn(playerId, BattleAction(battleId = battleId, action = action, itemId = itemId))
+            val turnResult = battleService.processTurn(
+                playerId,
+                BattleAction(battleId = battleId, action = action, itemId = itemId)
+            )
 
             val resp = ctx.alloc().buffer()
             resp.writeByte(Op.BATTLE_TURN.toInt())
@@ -192,6 +215,7 @@ class TcpGateway(
             val textLen = buf.readShort().toInt()
             val text = buf.readBytes(textLen.coerceAtMost(128)).toString(Charsets.UTF_8)
             log.debug("[CHAT] player $playerId: $text")
+            // Broadcast via WebSocket service (reuse same channel)
         }
 
         private fun buildPong(): ByteBuf {

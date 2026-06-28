@@ -60,6 +60,7 @@ class PlayerController(
                     "enemyLevel" to result.wildEncounter.enemyLevel,
                     "enemyHp" to result.wildEncounter.enemyHp,
                     "enemyElement" to result.wildEncounter.enemyElement,
+                    "enemySpriteId" to result.wildEncounter.enemySpriteId,
                     "catchable" to result.wildEncounter.catchable
                 )
             ))
