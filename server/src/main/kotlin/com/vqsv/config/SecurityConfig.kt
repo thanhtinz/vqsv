@@ -20,7 +20,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
 @EnableWebSecurity
-class SecurityConfig(private val jwtFilter: JwtAuthFilter) {
+class SecurityConfig(
+    private val jwtFilter: JwtAuthFilter,
+    // Comma-separated allowed origins for CORS. Defaults to "*" (convenient for
+    // local dev). In production set CORS_ALLOWED_ORIGINS to your real domains,
+    // e.g. https://play.example.com,https://admin.play.example.com
+    @org.springframework.beans.factory.annotation.Value("\${vqsv.cors.allowed-origins:*}")
+    private val corsAllowedOrigins: String
+) {
 
     @Bean
     fun filterChain(http: HttpSecurity): SecurityFilterChain {
@@ -47,7 +54,7 @@ class SecurityConfig(private val jwtFilter: JwtAuthFilter) {
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val config = CorsConfiguration().apply {
-            allowedOriginPatterns = listOf("*")
+            allowedOriginPatterns = corsAllowedOrigins.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
             allowedHeaders = listOf("*")
             allowCredentials = true

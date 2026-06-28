@@ -130,8 +130,8 @@ export default function UsersPage() {
   async function savePassword() {
     if (!pwUser) return;
     setPwError("");
-    if (newPassword.length < 4) {
-      setPwError("Mật khẩu phải có ít nhất 4 ký tự");
+    if (newPassword.length < 6) {
+      setPwError("Mật khẩu phải có ít nhất 6 ký tự");
       return;
     }
     try {

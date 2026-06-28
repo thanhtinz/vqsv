@@ -50,6 +50,10 @@ management:
       show-details: never
 
 vqsv:
+  cors:
+    # Lock CORS to your real domains in production, e.g.
+    # CORS_ALLOWED_ORIGINS=https://play.example.com,https://admin.play.example.com
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
   jwt:
     secret: ${JWT_SECRET}            # REQUIRED — no default in prod
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}

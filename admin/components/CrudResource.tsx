@@ -166,9 +166,14 @@ export default function CrudResource<T extends Record<string, any>>({
         case "checkbox":
           out[fl.name] = !!v;
           break;
-        case "datetime":
-          out[fl.name] = toIso(v);
+        case "datetime": {
+          // Omit empty datetimes entirely so the server applies its own default
+          // (e.g. a non-nullable startsAt) instead of receiving null and 400-ing.
+          const iso = toIso(v);
+          if (iso === null) delete out[fl.name];
+          else out[fl.name] = iso;
           break;
+        }
         default:
           out[fl.name] = v;
       }

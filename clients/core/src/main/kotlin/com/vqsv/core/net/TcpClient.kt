@@ -13,6 +13,9 @@ class TcpClient {
     var listener: PacketListener? = null
 
     fun connect(host: String, port: Int) {
+        // Close any previous connection first so repeated/failed logins don't leak
+        // sockets and stack duplicate receive loops feeding the listener.
+        disconnect()
         val t = Thread({
             try {
                 val s = Socket(host, port)

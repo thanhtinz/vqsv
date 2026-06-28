@@ -44,6 +44,9 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private var invSelected = 0
     private var playerHp = GameState.battlePlayerHp
     private var enemyHp = GameState.battleEnemyHp
+    // Captured once at battle start; battleEnemyHp itself is later overwritten with
+    // the enemy's CURRENT hp each turn, so the bar must use this fixed maximum.
+    private var enemyMaxHp = GameState.battleEnemyHp.coerceAtLeast(1)
 
     private val actionLabels = arrayOf("Tan cong", "Dung do", "Bat thu", "Bo chay")
 
@@ -51,6 +54,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         game.tcp.listener = this
         playerHp = GameState.battlePlayerHp
         enemyHp = GameState.battleEnemyHp
+        enemyMaxHp = GameState.battleEnemyHp.coerceAtLeast(1)
         resize(Gdx.graphics.width, Gdx.graphics.height)
         if (!GameAssets.available()) return
         val sid = GameState.battleEnemySpriteId
@@ -78,7 +82,6 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         val sh = Gdx.graphics.height.toFloat()
 
         val maxHp = GameState.hpMax.coerceAtLeast(1)
-        val enemyMaxHp = GameState.battleEnemyHp.coerceAtLeast(1)
         val barW = sw * 0.6f
         val barH = 20f
 
