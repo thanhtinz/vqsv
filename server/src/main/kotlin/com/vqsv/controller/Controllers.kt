@@ -8,10 +8,16 @@ import com.vqsv.game.pet.PetService
 import com.vqsv.service.AuthService
 import com.vqsv.util.JwtUtil
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.*
 
+// ============================================================
+// AUTH CONTROLLER
+// ============================================================
 @RestController
 @RequestMapping("/api/auth")
 class AuthController(private val authService: AuthService) {
@@ -25,25 +31,36 @@ class AuthController(private val authService: AuthService) {
         ResponseEntity.ok(authService.login(req))
 }
 
+// ============================================================
+// PLAYER CONTROLLER
+// ============================================================
 @RestController
 @RequestMapping("/api/player")
-class PlayerController(private val jwtUtil: JwtUtil, private val mapService: MapService) {
-
+class PlayerController(
+    private val jwtUtil: JwtUtil,
+    private val mapService: MapService
+) {
     @GetMapping("/map")
-    fun getMapState(auth: Authentication): ResponseEntity<MapStateDto> =
-        ResponseEntity.ok(mapService.getMapState(auth.principal as Long))
+    fun getMapState(auth: Authentication): ResponseEntity<MapStateDto> {
+        val playerId = (auth.principal as Long)
+        return ResponseEntity.ok(mapService.getMapState(playerId))
+    }
 
     @PostMapping("/move")
     fun move(@Valid @RequestBody req: MoveRequest, auth: Authentication): ResponseEntity<Any> {
-        val result = mapService.move(auth.principal as Long, req.direction)
+        val playerId = (auth.principal as Long)
+        val result = mapService.move(playerId, req.direction)
         return if (result.wildEncounter != null) {
-            val enc = result.wildEncounter
             ResponseEntity.ok(mapOf(
-                "newX" to result.newX, "newY" to result.newY,
+                "newX" to result.newX,
+                "newY" to result.newY,
                 "wildEncounter" to mapOf(
-                    "battleId" to enc.battleId, "enemyName" to enc.enemyName,
-                    "enemyLevel" to enc.enemyLevel, "enemyHp" to enc.enemyHp,
-                    "enemyElement" to enc.enemyElement, "catchable" to enc.catchable
+                    "battleId" to result.wildEncounter.battleId,
+                    "enemyName" to result.wildEncounter.enemyName,
+                    "enemyLevel" to result.wildEncounter.enemyLevel,
+                    "enemyHp" to result.wildEncounter.enemyHp,
+                    "enemyElement" to result.wildEncounter.enemyElement,
+                    "catchable" to result.wildEncounter.catchable
                 )
             ))
         } else {
@@ -52,56 +69,103 @@ class PlayerController(private val jwtUtil: JwtUtil, private val mapService: Map
     }
 }
 
+// ============================================================
+// PET CONTROLLER
+// ============================================================
 @RestController
 @RequestMapping("/api/pets")
 class PetController(private val petService: PetService) {
 
     @GetMapping
-    fun getPets(auth: Authentication): ResponseEntity<List<PetDto>> =
-        ResponseEntity.ok(petService.getPlayerPets(auth.principal as Long))
+    fun getPets(auth: Authentication): ResponseEntity<List<PetDto>> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(petService.getPlayerPets(playerId))
+    }
 
     @PostMapping("/{petId}/heal")
-    fun healPet(@PathVariable petId: Long, @RequestParam itemId: Short, auth: Authentication): ResponseEntity<PetDto> =
-        ResponseEntity.ok(petService.healPet(auth.principal as Long, petId, itemId))
+    fun healPet(
+        @PathVariable petId: Long,
+        @RequestParam itemId: Short,
+        auth: Authentication
+    ): ResponseEntity<PetDto> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(petService.healPet(playerId, petId, itemId))
+    }
 
     @PostMapping("/{petId}/evolve")
-    fun evolvePet(@PathVariable petId: Long, auth: Authentication): ResponseEntity<PetDto> =
-        ResponseEntity.ok(petService.evolvePet(auth.principal as Long, petId))
+    fun evolvePet(@PathVariable petId: Long, auth: Authentication): ResponseEntity<PetDto> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(petService.evolvePet(playerId, petId))
+    }
 
     @PostMapping("/{petId}/slot")
-    fun swapSlot(@PathVariable petId: Long, @RequestParam slot: Short, auth: Authentication): ResponseEntity<Void> {
-        petService.swapSlot(auth.principal as Long, petId, slot)
+    fun swapSlot(
+        @PathVariable petId: Long,
+        @RequestParam slot: Short,
+        auth: Authentication
+    ): ResponseEntity<Void> {
+        val playerId = auth.principal as Long
+        petService.swapSlot(playerId, petId, slot)
         return ResponseEntity.ok().build()
     }
 }
 
+// ============================================================
+// BATTLE CONTROLLER
+// ============================================================
 @RestController
 @RequestMapping("/api/battle")
 class BattleController(private val battleService: BattleService) {
 
     @PostMapping("/action")
-    fun action(@Valid @RequestBody req: BattleAction, auth: Authentication): ResponseEntity<BattleTurnResult> =
-        ResponseEntity.ok(battleService.processTurn(auth.principal as Long, req))
+    fun action(@Valid @RequestBody req: BattleAction, auth: Authentication): ResponseEntity<BattleTurnResult> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(battleService.processTurn(playerId, req))
+    }
 }
 
+// ============================================================
+// SHOP CONTROLLER
+// ============================================================
 @RestController
 @RequestMapping("/api/shop")
 class ShopController(private val shopService: ShopService) {
 
     @GetMapping
-    fun getShop(): ResponseEntity<List<ShopItemDto>> = ResponseEntity.ok(shopService.getShopItems())
+    fun getShop(): ResponseEntity<List<ShopItemDto>> =
+        ResponseEntity.ok(shopService.getShopItems())
 
     @GetMapping("/inventory")
-    fun getInventory(auth: Authentication): ResponseEntity<List<InventoryItemDto>> =
-        ResponseEntity.ok(shopService.getInventory(auth.principal as Long))
+    fun getInventory(auth: Authentication): ResponseEntity<List<InventoryItemDto>> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(shopService.getInventory(playerId))
+    }
 
     @PostMapping("/buy")
-    fun buy(@Valid @RequestBody req: BuyRequest, auth: Authentication): ResponseEntity<InventoryItemDto> =
-        ResponseEntity.ok(shopService.buyItem(auth.principal as Long, req))
+    fun buy(@Valid @RequestBody req: BuyRequest, auth: Authentication): ResponseEntity<InventoryItemDto> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(shopService.buyItem(playerId, req))
+    }
 }
 
+// ============================================================
+// GLOBAL ERROR HANDLER
+// ============================================================
 @RestControllerAdvice
 class GlobalExceptionHandler {
+    private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
+
+    // Bean-validation failures (@Valid) -> 400 with the first clean field message.
+    @ExceptionHandler(MethodArgumentNotValidException::class)
+    fun handleValidation(ex: MethodArgumentNotValidException): ResponseEntity<Map<String, String>> {
+        val msg = ex.bindingResult.fieldErrors.firstOrNull()?.defaultMessage ?: "Dữ liệu không hợp lệ"
+        return ResponseEntity.badRequest().body(mapOf("error" to msg))
+    }
+
+    // Malformed / unreadable JSON body -> 400.
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleUnreadable(ex: HttpMessageNotReadableException) =
+        ResponseEntity.badRequest().body(mapOf("error" to "Dữ liệu gửi lên không đọc được"))
 
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleBadRequest(ex: IllegalArgumentException) =
@@ -115,7 +179,11 @@ class GlobalExceptionHandler {
     fun handleForbidden(ex: SecurityException) =
         ResponseEntity.status(403).body(mapOf("error" to (ex.message ?: "Forbidden")))
 
+    // Catch-all: log the real cause server-side, return a generic message so we
+    // never leak stack traces / internals to clients.
     @ExceptionHandler(Exception::class)
-    fun handleGeneric(ex: Exception) =
-        ResponseEntity.status(500).body(mapOf("error" to "Lỗi server: ${ex.message}"))
+    fun handleGeneric(ex: Exception): ResponseEntity<Map<String, String>> {
+        log.error("Unhandled exception", ex)
+        return ResponseEntity.status(500).body(mapOf("error" to "Đã xảy ra lỗi, vui lòng thử lại sau"))
+    }
 }

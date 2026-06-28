@@ -32,7 +32,8 @@ class SecurityConfig(private val jwtFilter: JwtAuthFilter) {
                 it.requestMatchers(
                     "/api/auth/**",
                     "/ws/**",
-                    "/actuator/health"
+                    "/actuator/health",
+                    "/actuator/health/**"
                 ).permitAll()
                 it.anyRequest().authenticated()
             }
