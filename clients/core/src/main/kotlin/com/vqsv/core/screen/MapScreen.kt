@@ -79,16 +79,17 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         val h = Gdx.graphics.height.toFloat()
         font.color = Color.WHITE
         font.draw(batch, "${GameState.playerName} | Lv.${GameState.level} | HP:${GameState.hp}/${GameState.hpMax} | Xu:${GameState.kimTien}", 6f, h - 6f)
-        font.draw(batch, if (map != null) "Map ${GameState.mapId} | WASD/mui ten de di chuyen" else "WASD/mui ten | (chua co asset - dang dung luoi tam)", 6f, 22f)
+        font.draw(batch, "WASD di chuyen | P: Cua hang | B: Tui sung vat | M: Menu", 6f, 22f)
         batch.end()
     }
 
     private fun handleInput() {
-        // Open the original in-game menu (gamemenu.ui).
+        // Menu / shop / bag.
         if (Gdx.input.isKeyJustPressed(Keys.M)) {
-            game.setScreen(UiScreen(game, "gamemenu") { game.setScreen(MapScreen(game)) })
-            return
+            game.setScreen(UiScreen(game, "gamemenu") { game.setScreen(MapScreen(game)) }); return
         }
+        if (Gdx.input.isKeyJustPressed(Keys.P)) { game.setScreen(ShopScreen(game)); return }
+        if (Gdx.input.isKeyJustPressed(Keys.B)) { game.setScreen(PetsScreen(game)); return }
         if (moveCooldown > 0f) return
         val dir = when {
             Gdx.input.isKeyPressed(Keys.W) || Gdx.input.isKeyPressed(Keys.UP) -> 0

@@ -40,6 +40,18 @@ class RestClient(private val baseUrl: String) {
         val spd: Int = 10
     )
 
+    data class ShopItem(
+        val id: Int = 0,            // shop listing id
+        val itemId: Int = 0,
+        val itemName: String = "",
+        val itemType: String = "",
+        val effectVal: Int = 0,
+        val iconId: Int = 0,
+        val priceGold: Int? = null,
+        val priceMedal: Int? = null,
+        val description: String? = null
+    )
+
     private val client = OkHttpClient()
     private val gson = Gson()
     private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -80,19 +92,28 @@ class RestClient(private val baseUrl: String) {
         }
     }
 
-    fun getShop(cb: (List<Any>?, String?) -> Unit) {
+    fun getShop(cb: (List<ShopItem>?, String?) -> Unit) {
         get("$baseUrl/api/shop", null) { body, err ->
             if (err != null) { cb(null, err); return@get }
             try {
-                val type = object : TypeToken<List<Any>>() {}.type
+                val type = object : TypeToken<List<ShopItem>>() {}.type
                 cb(gson.fromJson(body, type), null)
             } catch (e: Exception) { cb(null, e.message) }
         }
     }
 
-    fun buyItem(token: String, itemId: Int, qty: Int, cb: (PlayerInfo?, String?) -> Unit) {
-        val body = gson.toJson(mapOf("itemId" to itemId, "qty" to qty))
-        postRaw("$baseUrl/api/shop/buy", body, token) { s, err -> parse(s, err, PlayerInfo::class.java, cb) }
+    /** Buy a shop listing. Server expects {shopListingId, quantity}. */
+    fun buyItem(token: String, shopListingId: Int, quantity: Int, cb: (Boolean, String?) -> Unit) {
+        val body = gson.toJson(mapOf("shopListingId" to shopListingId, "quantity" to quantity))
+        postRaw("$baseUrl/api/shop/buy", body, token) { _, err -> cb(err == null, err) }
+    }
+
+    fun healPet(token: String, petId: Long, itemId: Int, cb: (PetInfo?, String?) -> Unit) {
+        postRaw("$baseUrl/api/pets/$petId/heal?itemId=$itemId", "{}", token) { s, err -> parse(s, err, PetInfo::class.java, cb) }
+    }
+
+    fun evolvePet(token: String, petId: Long, cb: (PetInfo?, String?) -> Unit) {
+        postRaw("$baseUrl/api/pets/$petId/evolve", "{}", token) { s, err -> parse(s, err, PetInfo::class.java, cb) }
     }
 
     /** Parse a raw body into [T] and invoke the typed callback. */
