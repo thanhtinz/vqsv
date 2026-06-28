@@ -5,6 +5,7 @@ interface PacketListener {
     fun onMoveOk(x: Int, y: Int)
     fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int)
     fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String)
+    fun onChat(name: String, text: String)
     fun onError(msg: String)
     fun onPong()
 }

@@ -292,6 +292,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onAuthOk(token: String, level: Int, kimTien: Int, mapId: Int, posX: Int, posY: Int) {}
     override fun onMoveOk(x: Int, y: Int) {}
     override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int) {}
+    override fun onChat(name: String, text: String) {}
     override fun onPong() {}
     override fun onError(msg: String) {
         waitingForServer = false

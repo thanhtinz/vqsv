@@ -13,6 +13,7 @@ object Op {
     val MOVE_OK: Byte     = 0x83.toByte()
     val WILD_ENC: Byte    = 0x84.toByte()
     val BATTLE_TURN: Byte = 0x85.toByte()
+    val CHAT_MSG: Byte    = 0x87.toByte()
     val PONG: Byte        = 0x88.toByte()
     val ERROR: Byte       = 0xFF.toByte()
 }

@@ -62,6 +62,10 @@ class TcpGateway(
 
     // channel -> playerId for authenticated sessions
     private val sessions = ConcurrentHashMap<ChannelId, Long>()
+    // channel -> player name (for chat broadcast)
+    private val names = ConcurrentHashMap<ChannelId, String>()
+    // all live channels, for broadcasting
+    private val channels = io.netty.channel.group.DefaultChannelGroup(io.netty.util.concurrent.GlobalEventExecutor.INSTANCE)
 
     @PostConstruct
     fun start() {
@@ -127,6 +131,7 @@ class TcpGateway(
             if (result.isSuccess) {
                 val auth = result.getOrThrow()
                 sessions[ctx.channel().id()] = auth.player.id
+                names[ctx.channel().id()] = auth.player.name
                 val resp = ctx.alloc().buffer()
                 resp.writeByte(Op.AUTH_OK.toInt())
                 val tokenBytes = auth.token.toByteArray()
@@ -211,11 +216,26 @@ class TcpGateway(
         }
 
         private fun handleChat(ctx: ChannelHandlerContext, buf: ByteBuf) {
-            val playerId = sessions[ctx.channel().id()] ?: return
+            val id = ctx.channel().id()
+            sessions[id] ?: run { sendError(ctx, "Not authenticated"); return }
             val textLen = buf.readShort().toInt()
             val text = buf.readBytes(textLen.coerceAtMost(128)).toString(Charsets.UTF_8)
-            log.debug("[CHAT] player $playerId: $text")
-            // Broadcast via WebSocket service (reuse same channel)
+            val name = names[id] ?: "?"
+            log.debug("[CHAT] $name: $text")
+            broadcastChat(name, text)
+        }
+
+        // Broadcast a CHAT_MSG to every connected client (fresh buffer per channel).
+        private fun broadcastChat(name: String, text: String) {
+            val nameBytes = name.toByteArray(Charsets.UTF_8)
+            val textBytes = text.toByteArray(Charsets.UTF_8)
+            channels.forEach { ch ->
+                val msg = ch.alloc().buffer()
+                msg.writeByte(Op.CHAT_MSG.toInt())
+                msg.writeShort(nameBytes.size); msg.writeBytes(nameBytes)
+                msg.writeShort(textBytes.size); msg.writeBytes(textBytes)
+                ch.writeAndFlush(msg)
+            }
         }
 
         private fun buildPong(): ByteBuf {
@@ -233,8 +253,13 @@ class TcpGateway(
             ctx.write(resp)
         }
 
+        override fun channelActive(ctx: ChannelHandlerContext) {
+            channels.add(ctx.channel())   // auto-removed on close
+        }
+
         override fun channelInactive(ctx: ChannelHandlerContext) {
             sessions.remove(ctx.channel().id())
+            names.remove(ctx.channel().id())
             log.debug("[INFO] Client disconnected: ${ctx.channel().remoteAddress()}")
         }
 

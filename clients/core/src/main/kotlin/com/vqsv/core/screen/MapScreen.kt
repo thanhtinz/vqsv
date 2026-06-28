@@ -31,6 +31,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     private var tileMap: TileMap? = null
     private val tile get() = tileMap?.tileSize ?: 32
 
+    private val chatLog = ArrayList<String>()   // recent chat messages
+
     private val PLACEHOLDER_TILE = 32f
     private val MAP_COLS = 20
     private val MAP_ROWS = 12
@@ -79,7 +81,12 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         val h = Gdx.graphics.height.toFloat()
         font.color = Color.WHITE
         font.draw(batch, "${GameState.playerName} | Lv.${GameState.level} | HP:${GameState.hp}/${GameState.hpMax} | Xu:${GameState.kimTien}", 6f, h - 6f)
-        font.draw(batch, "WASD di chuyen | P: Cua hang | B: Tui sung vat | M: Menu", 6f, 22f)
+        font.draw(batch, "WASD di chuyen | P: Cua hang | B: Tui | M: Menu | T: Chat", 6f, 22f)
+        // Chat log (recent messages).
+        font.color = Color(0.8f, 0.9f, 1f, 1f)
+        chatLog.forEachIndexed { i, line ->
+            font.draw(batch, line, 6f, 46f + (chatLog.size - 1 - i) * 18f)
+        }
         batch.end()
     }
 
@@ -90,6 +97,14 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         }
         if (Gdx.input.isKeyJustPressed(Keys.P)) { game.setScreen(ShopScreen(game)); return }
         if (Gdx.input.isKeyJustPressed(Keys.B)) { game.setScreen(PetsScreen(game)); return }
+        // Chat: T opens a text input; the message is broadcast to all players.
+        if (Gdx.input.isKeyJustPressed(Keys.T)) {
+            Gdx.input.getTextInput(object : com.badlogic.gdx.Input.TextInputListener {
+                override fun input(text: String) { if (text.isNotBlank()) game.tcp.sendChat(text.take(128)) }
+                override fun canceled() {}
+            }, "Chat", "", "Nhap tin nhan")
+            return
+        }
         if (moveCooldown > 0f) return
         val dir = when {
             Gdx.input.isKeyPressed(Keys.W) || Gdx.input.isKeyPressed(Keys.UP) -> 0
@@ -117,6 +132,12 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     override fun onAuthOk(token: String, level: Int, kimTien: Int, mapId: Int, posX: Int, posY: Int) {}
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {}
+    override fun onChat(name: String, text: String) {
+        Gdx.app.postRunnable {
+            chatLog.add("$name: $text")
+            while (chatLog.size > 6) chatLog.removeAt(0)
+        }
+    }
     override fun onPong() {}
     override fun onError(msg: String) {}
 

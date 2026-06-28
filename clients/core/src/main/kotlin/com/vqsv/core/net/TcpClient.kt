@@ -130,6 +130,13 @@ class TcpClient {
                 val log = readStr(logLen)
                 listener?.onBattleTurn(playerHp, enemyHp, status, log)
             }
+            Op.CHAT_MSG -> {
+                val nameLen = readShort()
+                val name = readStr(nameLen)
+                val textLen = readShort()
+                val text = readStr(textLen)
+                listener?.onChat(name, text)
+            }
             Op.PONG -> {
                 listener?.onPong()
             }
