@@ -1,0 +1,30 @@
+# Caddy reverse proxy — automatic HTTPS via Let's Encrypt.
+# {$PUBLIC_DOMAIN} and {$ACME_EMAIL} come from the container environment.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode gzip
+
+	# WebSocket (STOMP) endpoint — must be proxied with upgrade support.
+	@ws {
+		path /ws*
+	}
+	reverse_proxy @ws server:8080
+
+	# REST API + everything else.
+	reverse_proxy server:8080 {
+		health_uri /actuator/health
+		health_interval 15s
+	}
+
+	header {
+		# Basic hardening headers.
+		Strict-Transport-Security "max-age=31536000;"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		-Server
+	}
+}
