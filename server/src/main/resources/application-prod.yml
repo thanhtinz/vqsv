@@ -54,6 +54,13 @@ vqsv:
     # Lock CORS to your real domains in production, e.g.
     # CORS_ALLOWED_ORIGINS=https://play.example.com,https://admin.play.example.com
     allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  payment:
+    vnpay:
+      enabled: ${VNPAY_ENABLED:false}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      hash-secret: ${VNPAY_HASH_SECRET:}
+      pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      return-url: ${VNPAY_RETURN_URL:}
   jwt:
     secret: ${JWT_SECRET}            # REQUIRED — no default in prod
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}

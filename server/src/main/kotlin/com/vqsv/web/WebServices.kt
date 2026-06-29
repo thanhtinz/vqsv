@@ -194,8 +194,12 @@ class GiftcodeService(
 class TopupService(
     private val packageRepo: TopupPackageRepository,
     private val paymentRepo: PaymentTransactionRepository,
-    private val accountRepo: AccountRepository
+    private val accountRepo: AccountRepository,
+    private val providers: List<com.vqsv.web.payment.PaymentProvider>
 ) {
+    private val providerMap by lazy { providers.associateBy { it.name.uppercase() } }
+    fun providerByName(name: String) = providerMap[name.uppercase()]
+
     fun packages(): List<TopupPackageDto> =
         packageRepo.findByActiveTrueOrderBySortOrderAsc().map {
             TopupPackageDto(it.id, it.name, it.priceVnd, it.xuAmount, it.bonusXu, it.xuAmount + it.bonusXu)
@@ -214,9 +218,27 @@ class TopupService(
             status = "PENDING",
             note = "Nạp gói ${pkg.name}"
         ))
-        // In production: build a real provider checkout URL (MoMo/VNPay/ZaloPay) here.
-        val payUrl = "/nap/thanh-toan?txid=${tx.id}"
+        // Ask the chosen gateway for a real checkout URL; fall back to the manual
+        // transfer page when the provider has no redirect (e.g. MANUAL / not enabled).
+        val payUrl = providerByName(req.provider)?.createCheckoutUrl(tx)
+            ?: "/nap/thanh-toan?txid=${tx.id}"
         return TopupOrderResponse(tx.id, tx.amountVnd, payUrl, tx.status)
+    }
+
+    /**
+     * Handle a gateway callback (return URL or IPN). Verifies the signature via the
+     * provider and credits xu on success. Idempotent (confirm() ignores a tx that is
+     * already SUCCESS), so the browser return and the server IPN can both fire safely.
+     */
+    @Transactional
+    fun handleCallback(providerName: String, params: Map<String, String>): Boolean {
+        val provider = providerByName(providerName) ?: return false
+        val result = provider.verifyCallback(params)
+        if (result.success && result.txId != null) {
+            confirm(result.txId, result.providerRef)
+            return true
+        }
+        return false
     }
 
     /** Marks a transaction SUCCESS and grants xu. Called by the provider webhook or an admin approval. */

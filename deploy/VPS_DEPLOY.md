@@ -138,11 +138,26 @@ cho cơ sở dữ liệu, Redis có mật khẩu + bền vững dữ liệu (AOF
 tắt máy an toàn (graceful shutdown), migration schema, ghi log, giới hạn tài nguyên,
 và sao lưu cơ sở dữ liệu.
 
+**Đã tích hợp sẵn cổng thanh toán VNPAY** (ký HMAC-SHA512, có endpoint nạp tiền +
+sổ cái giao dịch + callback xác minh chữ ký). Bật bằng cách điền các biến trong `.env`:
+
+```bash
+VNPAY_ENABLED=true
+VNPAY_TMN_CODE=<mã merchant VNPAY>
+VNPAY_HASH_SECRET=<chuỗi bí mật VNPAY>
+VNPAY_RETURN_URL=https://play.example.com/api/web/public/topup/vnpay/return
+# Khi lên thật, đổi VNPAY_PAY_URL sang URL production của VNPAY.
+```
+
+Trong trang quản lý VNPAY, khai báo Return URL + IPN URL trỏ tới
+`https://DOMAIN/api/web/public/topup/vnpay/{return,ipn}`. Để `VNPAY_ENABLED=false`
+thì web dùng luồng nạp thủ công (admin duyệt). Thêm cổng khác (MoMo/ZaloPay) chỉ cần
+thêm một `PaymentProvider` mới (xem `server/.../web/payment/`).
+
 **Vẫn là trách nhiệm của bạn trước khi thu phí:**
 
-- **Cổng thanh toán** — cửa hàng trong game hiện dùng kim tiền/huy chương kiếm được
-  khi chơi; muốn bán tiền tệ bằng tiền thật, bạn cần tích hợp MoMo/ZaloPay/VNPay/Stripe
-  cùng một endpoint nạp tiền và sổ cái giao dịch (ledger).
+- **Tài khoản & ký hợp đồng cổng thanh toán** (VNPAY/MoMo…) để lấy mã merchant +
+  khoá bí mật thật; phần tích hợp kỹ thuật đã có sẵn.
 - **Mở rộng nội dung game** — thêm bản đồ/sủng vật/vật phẩm ngoài dữ liệu seed ban đầu.
 - **Quản trị & kiểm duyệt** — trang admin và chống gian lận cho server có thẩm quyền.
 - **Pháp lý** — Điều khoản dịch vụ, chính sách bảo mật, và (tại Việt Nam) **giấy phép

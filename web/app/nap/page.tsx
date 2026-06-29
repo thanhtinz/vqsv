@@ -12,8 +12,11 @@ import { formatVnd, formatXu } from "@/lib/format";
 import type { TopupPackage, TopupOrderResult } from "@/lib/types";
 
 const PROVIDERS: { value: string; label: string }[] = [
-  { value: "MOMO", label: "Ví MoMo" },
-  { value: "ZALOPAY", label: "ZaloPay" },
+  // VNPAY is wired to a real gateway (when enabled on the server); the rest fall
+  // back to a manual transfer that an admin confirms.
+  { value: "VNPAY", label: "VNPAY (ATM/QR/Thẻ)" },
+  { value: "MOMO", label: "Ví MoMo (thủ công)" },
+  { value: "ZALOPAY", label: "ZaloPay (thủ công)" },
   { value: "BANKING", label: "Chuyển khoản ngân hàng" },
   { value: "CARD", label: "Thẻ cào điện thoại" },
 ];
