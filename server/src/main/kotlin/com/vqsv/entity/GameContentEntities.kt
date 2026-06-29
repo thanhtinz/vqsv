@@ -30,6 +30,10 @@ data class Npc(
     @Column(name = "dialog_key", length = 64)
     var dialogKey: String? = null,
 
+    // Free-text lines shown when a player talks to this NPC (lines split by '\n').
+    @Column(name = "dialog", columnDefinition = "TEXT")
+    var dialog: String? = null,
+
     // For BATTLE_TRAINER NPCs: the enemy template this trainer fights with.
     @Column(name = "enemy_template_id")
     var enemyTemplateId: Short? = null

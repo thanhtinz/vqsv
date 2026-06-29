@@ -38,6 +38,7 @@ object Op {
     const val PVP_CHALLENGE = 0x08.toByte() // [4B targetPlayerId]
     const val PVP_RESPOND   = 0x09.toByte() // [4B challengerId][1B accept]
     const val START_TRAINER = 0x0A.toByte() // [2B trainerId] (0 = pick one on current map)
+    const val TALK_NPC     = 0x0B.toByte()  // [2B npcId] (0 = the NPC adjacent to me)
 
     // Server -> Client
     const val AUTH_OK      = 0x81.toByte()
@@ -51,6 +52,7 @@ object Op {
     const val PVP_INVITE   = 0x89.toByte()  // [4B challengerId][2B nameLen][name]
     const val PVP_START    = 0x8A.toByte()  // [2B bidLen][battleId][2B oppNameLen][oppName][2B myHp][2B oppHp]
     const val ENEMY_SWAP   = 0x8B.toByte()  // trainer summons next enemy: [2B nameLen][name][2B hpMax][2B spriteId]
+    const val NPC_DIALOG   = 0x8C.toByte()  // [2B nameLen][name][2B dialogLen][dialog][1B npcType] (0=DIALOG,1=SHOP,2=BATTLE_TRAINER)
     const val ERROR        = 0xFF.toByte()
 }
 
@@ -129,6 +131,7 @@ class TcpGateway(
                     Op.PVP_CHALLENGE -> handlePvpChallenge(ctx, msg)
                     Op.PVP_RESPOND   -> handlePvpRespond(ctx, msg)
                     Op.START_TRAINER -> handleStartTrainer(ctx, msg)
+                    Op.TALK_NPC -> handleTalkNpc(ctx, msg)
                     Op.PING  -> ctx.write(buildPong())
                     else     -> sendError(ctx, "Unknown opcode 0x${opcode.toString(16)}")
                 }
@@ -377,6 +380,40 @@ class TcpGateway(
             resp.writeShort(session.enemyHp)
             resp.writeByte(0)   // not catchable
             resp.writeShort(session.enemySpriteId.toInt())
+            ctx.write(resp)
+        }
+
+        // ---- Talking to an NPC ----
+        // Walk up to any NPC and read its dialog (the original press-to-talk).
+        // TALK_NPC carries the NPC id; 0 means "the NPC adjacent to me". The reply
+        // carries the npc type so the client can offer the right follow-up (a shop
+        // NPC opens the shop, a trainer offers a duel).
+        private fun handleTalkNpc(ctx: ChannelHandlerContext, buf: ByteBuf) {
+            sessions[ctx.channel().id()] ?: run { sendError(ctx, "Not authenticated"); return }
+            val id = ctx.channel().id()
+            val pos = positions[id] ?: intArrayOf(1, 0, 0)
+            val requestedNpc = if (buf.readableBytes() >= 2) buf.readShort() else 0
+
+            val mapNpcs = npcRepo.findByMapId(pos[0].toShort())
+            fun adjacent(n: com.vqsv.entity.Npc) =
+                Math.abs(n.posX - pos[1]) <= 1 && Math.abs(n.posY - pos[2]) <= 1
+
+            val npc = if (requestedNpc > 0) mapNpcs.firstOrNull { it.id == requestedNpc }
+                      else mapNpcs.firstOrNull { adjacent(it) }
+            if (npc == null) { sendError(ctx, "Không có ai ở gần đây để nói chuyện"); return }
+            if (!adjacent(npc)) { sendError(ctx, "Hãy đến gần hơn"); return }
+
+            val typeCode = when (npc.npcType) {
+                "SHOP" -> 1; "BATTLE_TRAINER" -> 2; else -> 0
+            }
+            val dialog = npc.dialog ?: "..."
+            val nm = npc.name.toByteArray(Charsets.UTF_8)
+            val dl = dialog.toByteArray(Charsets.UTF_8)
+            val resp = ctx.alloc().buffer()
+            resp.writeByte(Op.NPC_DIALOG.toInt())
+            resp.writeShort(nm.size); resp.writeBytes(nm)
+            resp.writeShort(dl.size); resp.writeBytes(dl)
+            resp.writeByte(typeCode)
             ctx.write(resp)
         }
 

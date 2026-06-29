@@ -36,11 +36,14 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     private class Other(val name: String, val mapId: Int, val x: Int, val y: Int)
     private val others = HashMap<Long, Other>()  // other players' live positions
 
-    // BATTLE_TRAINER NPCs on the current map (walk up to duel them).
-    private val trainers = ArrayList<com.vqsv.core.net.RestClient.NpcInfo>()
+    // All NPCs on the current map (walk up to talk; trainers can be dueled).
+    private val npcs = ArrayList<com.vqsv.core.net.RestClient.NpcInfo>()
 
     private var pvpInviteFrom: Long? = null       // pending PvP invite (challenger id)
     private var pvpInviteName: String = ""
+
+    private var dialogNpcName: String = ""        // active NPC dialog overlay (empty = none)
+    private var dialogText: String = ""
 
     private val PLACEHOLDER_TILE = 32f
     private val MAP_COLS = 20
@@ -52,7 +55,7 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         game.tcp.listener = this
         resize(Gdx.graphics.width, Gdx.graphics.height)
         if (GameAssets.available()) tileMap = TileMap.load(GameState.mapId)
-        loadTrainers()
+        loadNpcs()
         // Pull medal (huy chuong) + hp from the REST profile so the HUD can show them
         // (the TCP auth packet only carries gold/kim tien).
         if (GameState.token.isNotEmpty()) {
@@ -65,21 +68,26 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         }
     }
 
-    /** Fetch BATTLE_TRAINER NPCs for the current map so they can be drawn and dueled. */
-    private fun loadTrainers() {
+    /** Fetch all NPCs for the current map so they can be drawn, talked to, and dueled. */
+    private fun loadNpcs() {
         game.rest.getNpcs(GameState.token, GameState.mapId) { list, _ ->
             Gdx.app.postRunnable {
-                trainers.clear()
-                if (list != null) trainers.addAll(list.filter { it.npcType == "BATTLE_TRAINER" })
+                npcs.clear()
+                if (list != null) npcs.addAll(list)
             }
         }
     }
 
+    private fun isAdjacent(n: com.vqsv.core.net.RestClient.NpcInfo) =
+        Math.abs(n.posX - GameState.posX) <= 1 && Math.abs(n.posY - GameState.posY) <= 1
+
     /** The trainer the player is standing on or next to, if any. */
     private fun adjacentTrainer(): com.vqsv.core.net.RestClient.NpcInfo? =
-        trainers.firstOrNull {
-            Math.abs(it.posX - GameState.posX) <= 1 && Math.abs(it.posY - GameState.posY) <= 1
-        }
+        npcs.firstOrNull { it.npcType == "BATTLE_TRAINER" && isAdjacent(it) }
+
+    /** Any NPC the player is standing next to (to talk to), if any. */
+    private fun adjacentNpc(): com.vqsv.core.net.RestClient.NpcInfo? =
+        npcs.firstOrNull { isAdjacent(it) }
 
     override fun render(delta: Float) {
         Gdx.gl.glClearColor(0.08f, 0.10f, 0.12f, 1f)
@@ -95,8 +103,10 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             // Player marker in the same y-down space.
             shape.projectionMatrix = worldCam.combined
             shape.begin(ShapeRenderer.ShapeType.Filled)
-            shape.color = Color.ORANGE
-            trainers.forEach { shape.rect(it.posX * tile.toFloat(), it.posY * tile.toFloat(), tile.toFloat(), tile.toFloat()) }
+            npcs.forEach {
+                shape.color = if (it.npcType == "BATTLE_TRAINER") Color.ORANGE else Color.LIME
+                shape.rect(it.posX * tile.toFloat(), it.posY * tile.toFloat(), tile.toFloat(), tile.toFloat())
+            }
             shape.color = Color.MAGENTA
             others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * tile.toFloat(), it.y * tile.toFloat(), tile.toFloat(), tile.toFloat()) }
             shape.color = Color.CYAN
@@ -110,12 +120,24 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
                 shape.color = if ((row + col) % 2 == 0) Color(0.2f, 0.6f, 0.2f, 1f) else Color(0.15f, 0.5f, 0.15f, 1f)
                 shape.rect(col * PLACEHOLDER_TILE, row * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
             }
-            shape.color = Color.ORANGE
-            trainers.forEach { shape.rect(it.posX * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.posY) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE) }
+            npcs.forEach {
+                shape.color = if (it.npcType == "BATTLE_TRAINER") Color.ORANGE else Color.LIME
+                shape.rect(it.posX * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.posY) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
+            }
             shape.color = Color.MAGENTA
             others.values.forEach { if (it.mapId == GameState.mapId) shape.rect(it.x * PLACEHOLDER_TILE, (MAP_ROWS - 1 - it.y) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE) }
             shape.color = Color.CYAN
             shape.rect(GameState.posX * PLACEHOLDER_TILE, (MAP_ROWS - 1 - GameState.posY) * PLACEHOLDER_TILE, PLACEHOLDER_TILE, PLACEHOLDER_TILE)
+            shape.end()
+        }
+
+        val w = Gdx.graphics.width.toFloat()
+        // NPC dialog box background (y-up), drawn under the HUD text.
+        if (dialogNpcName.isNotEmpty()) {
+            shape.projectionMatrix = hudCam.combined
+            shape.begin(ShapeRenderer.ShapeType.Filled)
+            shape.color = Color(0f, 0f, 0f, 0.85f)
+            shape.rect(20f, 20f, w - 40f, 120f)
             shape.end()
         }
 
@@ -131,11 +153,16 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             font.draw(batch, "Online: " + onlineHere.joinToString(", ") { it.name }.take(60), 6f, h - 24f)
             font.color = Color.WHITE
         }
-        font.draw(batch, "WASD | P:Shop B:Tui M:Menu T:Chat F:PvP", 6f, 22f)
-        // Contextual trainer prompt (original walk-up-to-fight behaviour).
+        font.draw(batch, "WASD | E:Noi chuyen P:Shop B:Tui M:Menu T:Chat F:PvP", 6f, 22f)
+        // Contextual prompts (original walk-up-to-interact behaviour).
         adjacentTrainer()?.let {
             font.color = Color.ORANGE
             font.draw(batch, "G: Giao dau voi ${it.name}", 6f, 40f)
+            font.color = Color.WHITE
+        }
+        adjacentNpc()?.takeIf { it.npcType != "BATTLE_TRAINER" }?.let {
+            font.color = Color.LIME
+            font.draw(batch, "E: Noi chuyen voi ${it.name}", 6f, 40f)
             font.color = Color.WHITE
         }
         // Chat log (recent messages).
@@ -149,10 +176,37 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             font.draw(batch, "$pvpInviteName moi ban PvP!  Y = Dong y   N = Tu choi", 6f, h * 0.5f)
             font.color = Color.WHITE
         }
+        // NPC dialog text overlay.
+        if (dialogNpcName.isNotEmpty()) {
+            font.color = Color.YELLOW
+            font.draw(batch, dialogNpcName, 32f, 128f)
+            font.color = Color.WHITE
+            dialogText.split("\n").forEachIndexed { i, line ->
+                font.draw(batch, line, 32f, 108f - i * 18f)
+            }
+            font.color = Color.GRAY
+            font.draw(batch, "[E/Enter de dong]", w - 160f, 36f)
+            font.color = Color.WHITE
+        }
         batch.end()
     }
 
     private fun handleInput() {
+        // An open NPC dialog captures input: any of E/Enter/Esc closes it.
+        if (dialogNpcName.isNotEmpty()) {
+            if (Gdx.input.isKeyJustPressed(Keys.E) || Gdx.input.isKeyJustPressed(Keys.ENTER) ||
+                Gdx.input.isKeyJustPressed(Keys.ESCAPE)) {
+                dialogNpcName = ""; dialogText = ""
+            }
+            return
+        }
+        // E: talk to the NPC you are standing next to (walk up to interact).
+        if (Gdx.input.isKeyJustPressed(Keys.E)) {
+            val n = adjacentNpc()
+            if (n != null) game.tcp.sendTalkNpc(n.id)
+            else chatLog.add("Khong co ai gan day de noi chuyen")
+            return
+        }
         // Menu / shop / bag.
         if (Gdx.input.isKeyJustPressed(Keys.M)) {
             game.setScreen(UiScreen(game, "gamemenu", onBack = { game.setScreen(MapScreen(game)) }, menuItems = listOf(
@@ -245,6 +299,9 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         }
     }
     override fun onEnemySwap(name: String, hpMax: Int, spriteId: Int) {}
+    override fun onNpcDialog(npcName: String, dialog: String, npcType: Int) {
+        Gdx.app.postRunnable { dialogNpcName = npcName; dialogText = dialog }
+    }
     override fun onPong() {}
     override fun onError(msg: String) {}
 

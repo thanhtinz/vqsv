@@ -12,6 +12,7 @@ interface Npc {
   posX: number;
   posY: number;
   dialogKey: string;
+  dialog: string;
 }
 
 const columns: Column<Npc>[] = [
@@ -35,11 +36,12 @@ export default function NpcsPage() {
       fields={[
         { name: "name", label: "Tên", required: true },
         { name: "spriteId", label: "Sprite ID", type: "number", defaultValue: 0 },
-        { name: "npcType", label: "Loại NPC", placeholder: "vd: SHOP, QUEST" },
+        { name: "npcType", label: "Loại NPC", placeholder: "vd: DIALOG, SHOP, BATTLE_TRAINER" },
         { name: "mapId", label: "Bản đồ (mapId)", type: "number", required: true, defaultValue: 0 },
         { name: "posX", label: "Toạ độ X", type: "number", defaultValue: 0 },
         { name: "posY", label: "Toạ độ Y", type: "number", defaultValue: 0 },
         { name: "dialogKey", label: "Khoá hội thoại" },
+        { name: "dialog", label: "Lời thoại (mỗi dòng một câu)", type: "textarea", placeholder: "Xin chào!\nChúc bạn chơi vui." },
       ]}
     />
   );

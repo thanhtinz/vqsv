@@ -10,6 +10,8 @@ interface PacketListener {
     fun onPvpInvite(challengerId: Long, name: String)
     fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int)
     fun onEnemySwap(name: String, hpMax: Int, spriteId: Int)
+    // npcType: 0=DIALOG, 1=SHOP, 2=BATTLE_TRAINER. Default no-op so only the map screen handles it.
+    fun onNpcDialog(npcName: String, dialog: String, npcType: Int) {}
     fun onError(msg: String)
     fun onPong()
 }

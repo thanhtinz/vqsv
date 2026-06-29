@@ -10,6 +10,7 @@ object Op {
     const val PVP_CHALLENGE: Byte = 0x08
     const val PVP_RESPOND: Byte   = 0x09
     const val START_TRAINER: Byte = 0x0A
+    const val TALK_NPC: Byte      = 0x0B
 
     // Server -> Client
     val AUTH_OK: Byte     = 0x81.toByte()
@@ -22,5 +23,6 @@ object Op {
     val PVP_INVITE: Byte  = 0x89.toByte()
     val PVP_START: Byte   = 0x8A.toByte()
     val ENEMY_SWAP: Byte  = 0x8B.toByte()
+    val NPC_DIALOG: Byte  = 0x8C.toByte()
     val ERROR: Byte       = 0xFF.toByte()
 }

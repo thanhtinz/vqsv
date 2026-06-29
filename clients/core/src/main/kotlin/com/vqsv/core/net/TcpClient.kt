@@ -173,6 +173,14 @@ class TcpClient {
                 val spriteId = readShort()
                 listener?.onEnemySwap(name, hpMax, spriteId)
             }
+            Op.NPC_DIALOG -> {
+                val nameLen = readShort()
+                val name = readStr(nameLen)
+                val dialogLen = readShort()
+                val dialog = readStr(dialogLen)
+                val npcType = readByte()
+                listener?.onNpcDialog(name, dialog, npcType)
+            }
             Op.PONG -> {
                 listener?.onPong()
             }
@@ -245,6 +253,11 @@ class TcpClient {
         sendQueue.put(byteArrayOf(Op.PVP_RESPOND,
             (c shr 24).toByte(), (c shr 16).toByte(), (c shr 8).toByte(), c.toByte(),
             (if (accept) 1 else 0).toByte()))
+    }
+
+    fun sendTalkNpc(npcId: Int = 0) {
+        sendQueue.put(byteArrayOf(Op.TALK_NPC,
+            (npcId shr 8).toByte(), (npcId and 0xFF).toByte()))
     }
 
     fun sendStartTrainer(trainerId: Int = 0) {
