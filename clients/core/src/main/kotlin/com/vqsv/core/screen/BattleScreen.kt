@@ -94,10 +94,9 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
             GameState.playerPetSpriteId = pet.spriteId
             if (GameAssets.available()) GameAssets.sprite(pet.spriteId)?.let { playerAnim = SpriteAnimator(it) }
         }
-        if (!GameState.battleIsPvp) {
-            game.rest.getPetSkills(GameState.token, petId) { sk, _ ->
-                Gdx.app.postRunnable { skills = sk ?: emptyList() }
-            }
+        // Skills are available in PvE and PvP (both use the active pet's moves).
+        game.rest.getPetSkills(GameState.token, petId) { sk, _ ->
+            Gdx.app.postRunnable { skills = sk ?: emptyList() }
         }
     }
 
@@ -209,7 +208,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         font.draw(batch, when {
             waitingForServer -> "Dang cho server..."
             !GameState.battleIsPvp -> "ENTER xac nhan | S: Ky nang | C: Doi pet"
-            else -> "Mui ten chon, ENTER/SPACE xac nhan"
+            else -> "ENTER xac nhan | S: Ky nang"
         }, 5f, sh - 5f)
 
         // Floating damage numbers (rise + fade).
@@ -263,8 +262,8 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         if (pickingSkill) { handleSkillPicker(); return }
         if (pickingSwitch) { handleSwitchPicker(); return }
         if (waitingForServer) return
-        // S opens the skill menu (PvE only; PvP resolves server-side).
-        if (Gdx.input.isKeyJustPressed(Keys.S) && !GameState.battleIsPvp) {
+        // S opens the skill menu (works in PvE and PvP).
+        if (Gdx.input.isKeyJustPressed(Keys.S)) {
             if (skills.isEmpty()) GameState.battleLog.add("Chua hoc ky nang nao")
             else { skillSelected = 0; pickingSkill = true }
             return

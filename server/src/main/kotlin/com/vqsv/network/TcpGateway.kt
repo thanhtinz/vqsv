@@ -267,8 +267,9 @@ class TcpGateway(
             val itemId: Short? = if (buf.readableBytes() >= 2) buf.readShort() else null
 
             // PvP battles are routed to the PvpService and resolve when both players act.
+            // For a skill (action 4) the optional field carries the skill id.
             if (pvpService.isPvp(battleId)) {
-                val rr = pvpService.submitAction(battleId, playerId, actionCode.toInt())
+                val rr = pvpService.submitAction(battleId, playerId, actionCode.toInt(), itemId?.toInt() ?: -1)
                 if (rr != null) sendPvpRound(rr)
                 return
             }

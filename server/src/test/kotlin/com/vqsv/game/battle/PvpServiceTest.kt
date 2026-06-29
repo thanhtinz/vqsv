@@ -2,7 +2,9 @@ package com.vqsv.game.battle
 
 import com.vqsv.entity.PetTemplate
 import com.vqsv.entity.PlayerPet
+import com.vqsv.entity.Skill
 import com.vqsv.repository.PlayerPetRepository
+import com.vqsv.repository.SkillRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -23,20 +25,24 @@ class PvpServiceTest {
         val tpl = mock(PetTemplate::class.java)
         `when`(tpl.element).thenReturn(element)
         `when`(tpl.spriteId).thenReturn(1)
+        `when`(tpl.skillElem).thenReturn(0)
         val p = mock(PlayerPet::class.java)
         `when`(p.hpMax).thenReturn(hpMax)
         `when`(p.atk).thenReturn(atk.toShort())
         `when`(p.def).thenReturn(def.toShort())
         `when`(p.spd).thenReturn(spd.toShort())
+        `when`(p.level).thenReturn(5)
         `when`(p.template).thenReturn(tpl)
         return p
     }
 
-    private fun serviceWith(p1: PlayerPet?, p2: PlayerPet?): PvpService {
+    private fun serviceWith(p1: PlayerPet?, p2: PlayerPet?, skills: List<Skill> = emptyList()): PvpService {
         val repo = mock(PlayerPetRepository::class.java)
         `when`(repo.findByPlayerIdAndSlot(1L, 0)).thenReturn(Optional.ofNullable(p1))
         `when`(repo.findByPlayerIdAndSlot(2L, 0)).thenReturn(Optional.ofNullable(p2))
-        return PvpService(repo)
+        val skillRepo = mock(SkillRepository::class.java)
+        `when`(skillRepo.findByElement(0)).thenReturn(skills)
+        return PvpService(repo, SkillService(skillRepo))
     }
 
     @Test
@@ -84,6 +90,19 @@ class PvpServiceTest {
         assertEquals("A_WIN", r.status)
         assertEquals(0, r.bHp)
         assertTrue(svc.session(s.battleId) == null, "finished session is removed")
+    }
+
+    @Test
+    fun `a skill the pet has learned is used and logged in PvP`() {
+        // A high-power WOOD skill (element 0) that A has learned (required_level <= 5).
+        val skill = Skill(id = 0, name = "Lá Sắc", element = 0, requiredLevel = 1, spCost = 10, power = 200)
+        // A is fast so it strikes first; very high HP so neither dies -> deterministic ONGOING.
+        val svc = serviceWith(pet(2000, 50, 10, 9), pet(2000, 50, 10, 5), skills = listOf(skill))
+        val s = svc.start(1L, "A", 2L, "B")!!
+        svc.submitAction(s.battleId, 1L, 4, 0) // A uses skill id 0
+        val r = svc.submitAction(s.battleId, 2L, 0)!! // B attacks
+        assertEquals("ONGOING", r.status)
+        assertTrue(r.log.any { it.contains("dùng Lá Sắc") }, "the skill use should be logged")
     }
 
     @Test
