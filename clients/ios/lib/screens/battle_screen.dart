@@ -67,7 +67,7 @@ class _BattleScreenState extends State<BattleScreen> {
   Widget build(BuildContext context) {
     return Consumer<GameState>(
       builder: (context, gs, _) {
-        final maxEnemyHp = gs.battleEnemyHp > 0 ? gs.battleEnemyHp : 1;
+        final maxEnemyHp = gs.battleEnemyMaxHp > 0 ? gs.battleEnemyMaxHp : 1;
         final maxPlayerHp =
             (gs.player?.hpMax ?? 1) > 0 ? (gs.player?.hpMax ?? 1) : 1;
         final logEntries = gs.battleLog.reversed.take(5).toList().reversed.toList();

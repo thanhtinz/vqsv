@@ -7,8 +7,9 @@ import com.vqsv.j2me.net.ServerConn;
 
 public class LoginScreen extends Form implements CommandListener, ServerConn.ConnListener {
 
-    // TODO: Change this to your actual server IP or hostname
-    private static final String SERVER_HOST = "your.server.ip";
+    // Single configurable connection target. Change SERVER_HOST to your
+    // deployed server's IP/hostname; "localhost" is a sensible local default.
+    private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 9090;
 
     private TextField tfUsername;
@@ -69,11 +70,31 @@ public class LoginScreen extends Form implements CommandListener, ServerConn.Con
         // not expected on login screen
     }
 
-    public void onWildEnc(int x, int y, String battleId, String name, int lvl, int hp, boolean catchable) {
+    public void onWildEnc(int x, int y, String battleId, String name, int lvl, int hp, boolean catchable, int spriteId) {
         // not expected on login screen
     }
 
     public void onBattleTurn(int pHp, int eHp, String status, String log) {
+        // not expected on login screen
+    }
+
+    public void onChat(String name, String text) {
+        // not expected on login screen
+    }
+
+    public void onPlayerNear(long playerId, boolean present, int mapId, int x, int y, String name) {
+        // not expected on login screen
+    }
+
+    public void onPvpInvite(long challengerId, String name) {
+        // not expected on login screen
+    }
+
+    public void onPvpStart(String battleId, String oppName, int myHp, int oppHp, int oppSpriteId) {
+        // not expected on login screen
+    }
+
+    public void onPong() {
         // not expected on login screen
     }
 

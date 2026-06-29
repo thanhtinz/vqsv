@@ -1,5 +1,35 @@
 import 'package:flutter/foundation.dart';
 
+/// A nearby (other) player tracked from PLAYER_NEAR broadcasts.
+class NearbyPlayer {
+  final int id;
+  final String name;
+  final int mapId;
+  final int x;
+  final int y;
+  const NearbyPlayer({
+    required this.id,
+    required this.name,
+    required this.mapId,
+    required this.x,
+    required this.y,
+  });
+}
+
+/// A single chat line received from CHAT_MSG.
+class ChatMessage {
+  final String name;
+  final String text;
+  const ChatMessage(this.name, this.text);
+}
+
+/// A pending PvP invite (PVP_INVITE) awaiting accept/decline.
+class PvpInvite {
+  final int challengerId;
+  final String name;
+  const PvpInvite(this.challengerId, this.name);
+}
+
 class PlayerInfo {
   final int id;
   final String name;
@@ -83,15 +113,88 @@ class GameState extends ChangeNotifier {
   String? activeBattleId;
   int battlePlayerHp = 0;
   int battleEnemyHp = 0;
+  // Captured once at the start of a battle so the enemy HP bar can drain
+  // against a fixed maximum instead of the current HP each turn.
+  int battleEnemyMaxHp = 1;
   int battleEnemyLevel = 1;
   String battleEnemyName = '';
   String battleStatus = '';
   List<String> battleLog = [];
   bool catchable = false;
 
+  // Other players currently visible, keyed by playerId (from PLAYER_NEAR).
+  final Map<int, NearbyPlayer> nearbyPlayers = {};
+  // Rolling chat log (from CHAT_MSG).
+  final List<ChatMessage> chatLog = [];
+  // Most recent unanswered PvP invite (from PVP_INVITE), if any.
+  PvpInvite? pendingPvpInvite;
+
   void updateFromAuthJson(Map<String, dynamic> json) {
     token = json['token'] as String? ?? '';
     player = PlayerInfo.fromJson(json['player'] as Map<String, dynamic>);
+    notifyListeners();
+  }
+
+  /// Apply the binary AUTH_OK body. The HTTP login already populated the full
+  /// player profile; here we just reconcile the authoritative fields the TCP
+  /// server reports (token, level, kimTien, position).
+  void applyAuthOk(
+    String token,
+    int level,
+    int kimTien,
+    int mapId,
+    int posX,
+    int posY,
+  ) {
+    if (token.isNotEmpty) this.token = token;
+    player = player?.copyWith(
+      level: level,
+      kimTien: kimTien,
+      mapId: mapId,
+      posX: posX,
+      posY: posY,
+    );
+    notifyListeners();
+  }
+
+  void updatePlayerNear(NearbyPlayer p, bool present) {
+    if (present) {
+      nearbyPlayers[p.id] = p;
+    } else {
+      nearbyPlayers.remove(p.id);
+    }
+    notifyListeners();
+  }
+
+  void addChat(String name, String text) {
+    chatLog.add(ChatMessage(name, text));
+    // Keep the log bounded.
+    if (chatLog.length > 100) chatLog.removeAt(0);
+    notifyListeners();
+  }
+
+  void setPvpInvite(PvpInvite? invite) {
+    pendingPvpInvite = invite;
+    notifyListeners();
+  }
+
+  /// Set up battle state from a PVP_START frame.
+  void setPvpBattle(
+    String battleId,
+    String oppName,
+    int myHp,
+    int oppHp,
+  ) {
+    activeBattleId = battleId;
+    battleEnemyName = oppName;
+    battleEnemyLevel = 0; // unknown for PvP
+    battleEnemyHp = oppHp;
+    battleEnemyMaxHp = oppHp > 0 ? oppHp : 1;
+    battlePlayerHp = myHp;
+    catchable = false;
+    battleLog = [];
+    battleStatus = '';
+    pendingPvpInvite = null;
     notifyListeners();
   }
 
@@ -113,6 +216,7 @@ class GameState extends ChangeNotifier {
     battleEnemyName = name;
     battleEnemyLevel = level;
     battleEnemyHp = hp;
+    battleEnemyMaxHp = hp > 0 ? hp : 1;
     catchable = isCatchable;
     battleLog = [];
     battleStatus = '';

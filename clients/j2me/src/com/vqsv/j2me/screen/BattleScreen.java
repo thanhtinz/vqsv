@@ -11,6 +11,16 @@ public class BattleScreen extends Canvas implements CommandListener, ServerConn.
 
     // action indices map to protocol: 0=ATTACK 1=USE_ITEM 2=CATCH 3=RUN
     // ACTIONS[0]=Tan cong->0, ACTIONS[1]=Dung do->1, ACTIONS[2]=Bat thu->2, ACTIONS[3]=Bo chay->3
+    private static final int ACT_ATTACK   = 0;
+    private static final int ACT_USE_ITEM = 1;
+    private static final int ACT_CATCH    = 2;
+    private static final int ACT_RUN      = 3;
+
+    // Default item id used for USE_ITEM / CATCH. The protocol requires a trailing
+    // 2-byte itemId for these actions; a richer client would let the player pick
+    // from a bag. We default to item 1 (basic potion / capture ball).
+    // TODO: present an item-selection list instead of a fixed default.
+    private static final int DEFAULT_ITEM_ID = 1;
 
     private int selectedAction = 0;
     private boolean waiting = false;
@@ -205,7 +215,14 @@ public class BattleScreen extends Canvas implements CommandListener, ServerConn.
         new Thread(new Runnable() {
             public void run() {
                 try {
-                    GameMIDLet.getConn().sendBattleAct(gd.activeBattleId, action);
+                    // USE_ITEM and CATCH require a trailing 2-byte itemId; ATTACK
+                    // and RUN do not. Pick the right send method accordingly.
+                    if (action == ACT_USE_ITEM || action == ACT_CATCH) {
+                        GameMIDLet.getConn().sendBattleActWithItem(
+                            gd.activeBattleId, action, DEFAULT_ITEM_ID);
+                    } else {
+                        GameMIDLet.getConn().sendBattleAct(gd.activeBattleId, action);
+                    }
                 } catch (Exception e) {
                     waiting = false;
                     onError("Loi gui lenh: " + e.getMessage());
@@ -222,7 +239,29 @@ public class BattleScreen extends Canvas implements CommandListener, ServerConn.
 
     public void onMoveOk(int x, int y) { }
 
-    public void onWildEnc(int x, int y, String battleId, String name, int lvl, int hp, boolean catchable) { }
+    public void onWildEnc(int x, int y, String battleId, String name, int lvl, int hp, boolean catchable, int spriteId) { }
+
+    public void onChat(String name, String text) {
+        GameData.getInstance().addChat(name + ": " + text);
+        // Chat is not rendered on the battle screen; it is retained in GameData
+        // and shown when the player returns to the map.
+    }
+
+    public void onPlayerNear(long playerId, boolean present, int mapId, int x, int y, String name) {
+        GameData.getInstance().updateNear(playerId, present, mapId, x, y, name);
+    }
+
+    public void onPvpInvite(long challengerId, String name) {
+        // Already in battle; ignore incoming invites for now.
+        // TODO: queue or auto-decline.
+    }
+
+    public void onPvpStart(String battleId, String oppName, int myHp, int oppHp, int oppSpriteId) {
+        // Re-enter a fresh battle screen for the PvP match.
+        GameMIDLet.getInstance().showScreen(new BattleScreen());
+    }
+
+    public void onPong() { }
 
     public void onBattleTurn(int pHp, int eHp, String status, String log) {
         GameData gd = GameData.getInstance();

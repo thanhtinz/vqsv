@@ -18,10 +18,113 @@ class _MapScreenState extends State<MapScreen> {
   static const _mapCols = 20;
   static const _mapRows = 12;
 
+  final _chatCtrl = TextEditingController();
+  bool _chatOpen = false;
+
+  @override
+  void dispose() {
+    _chatCtrl.dispose();
+    super.dispose();
+  }
+
+  void _sendChat() {
+    final text = _chatCtrl.text.trim();
+    if (text.isEmpty) return;
+    widget.tcpService.sendChat(text);
+    _chatCtrl.clear();
+  }
+
   @override
   void initState() {
     super.initState();
     widget.tcpService.onPacket = _handlePacket;
+    _wireEvents();
+  }
+
+  /// Register typed event handlers for the social/PvP server messages. These
+  /// run in addition to the raw [onPacket] handler used for movement and wild
+  /// encounters. Clears the login screen's stale AUTH_OK/error closures.
+  void _wireEvents() {
+    final tcp = widget.tcpService;
+    tcp.onAuthOk = null; // login is done; avoid stale closures firing
+    tcp.onPlayerNear = (p) {
+      if (!mounted) return;
+      context
+          .read<GameState>()
+          .updatePlayerNear(
+            NearbyPlayer(
+                id: p.playerId, name: p.name, mapId: p.mapId, x: p.x, y: p.y),
+            p.present,
+          );
+    };
+    tcp.onChat = (name, text) {
+      if (!mounted) return;
+      context.read<GameState>().addChat(name, text);
+    };
+    tcp.onError = (msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    };
+    tcp.onPvpInvite = (challengerId, name) {
+      if (!mounted) return;
+      context.read<GameState>().setPvpInvite(PvpInvite(challengerId, name));
+      _showPvpInviteDialog(challengerId, name);
+    };
+    tcp.onPvpStart = (start) {
+      if (!mounted) return;
+      context.read<GameState>().setPvpBattle(
+            start.battleId,
+            start.oppName,
+            start.myHp,
+            start.oppHp,
+          );
+      _openBattle();
+    };
+  }
+
+  void _showPvpInviteDialog(int challengerId, String name) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A3A),
+        title: const Text('Lời mời PvP',
+            style: TextStyle(color: Colors.white)),
+        content: Text('$name muốn thách đấu bạn!',
+            style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              widget.tcpService.sendPvpRespond(challengerId, false);
+              context.read<GameState>().setPvpInvite(null);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Từ chối'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              widget.tcpService.sendPvpRespond(challengerId, true);
+              Navigator.pop(ctx);
+              // PVP_START will follow and open the battle screen.
+            },
+            child: const Text('Chấp nhận'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openBattle() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BattleScreen(tcpService: widget.tcpService),
+      ),
+    ).then((_) {
+      // Re-register handlers when returning from battle.
+      widget.tcpService.onPacket = _handlePacket;
+      _wireEvents();
+    });
   }
 
   void _handlePacket(int op, Uint8List payload) {
@@ -57,15 +160,7 @@ class _MapScreenState extends State<MapScreen> {
       offset += 2;
       final isCatchable = payload[offset] != 0;
       gs.setWildEncounter(x, y, battleId, name, level, hp, isCatchable);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => BattleScreen(tcpService: widget.tcpService),
-        ),
-      ).then((_) {
-        // Re-register packet handler when returning from battle
-        widget.tcpService.onPacket = _handlePacket;
-      });
+      _openBattle();
     }
   }
 
@@ -103,6 +198,25 @@ class _MapScreenState extends State<MapScreen> {
               style: const TextStyle(fontSize: 14, color: Colors.white),
             ),
             automaticallyImplyLeading: false,
+            actions: [
+              IconButton(
+                tooltip: 'Trò chuyện',
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                    if (gs.chatLog.isNotEmpty && !_chatOpen)
+                      const Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Icon(Icons.circle,
+                            size: 8, color: Colors.lightBlueAccent),
+                      ),
+                  ],
+                ),
+                onPressed: () => setState(() => _chatOpen = !_chatOpen),
+              ),
+            ],
           ),
           body: Column(
             children: [
@@ -116,6 +230,10 @@ class _MapScreenState extends State<MapScreen> {
                       playerY: player?.posY ?? 0,
                       cols: _mapCols,
                       rows: _mapRows,
+                      others: gs.nearbyPlayers.values
+                          .where((p) =>
+                              player == null || p.mapId == player.mapId)
+                          .toList(),
                     ),
                     child: const SizedBox.expand(),
                   ),
@@ -149,10 +267,82 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
               ),
+              if (_chatOpen) _buildChatPanel(gs),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildChatPanel(GameState gs) {
+    final messages = gs.chatLog;
+    return Container(
+      height: 200,
+      color: const Color(0xFF12122E),
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              itemCount: messages.length,
+              itemBuilder: (_, i) {
+                final m = messages[i];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 13),
+                      children: [
+                        TextSpan(
+                          text: '${m.name}: ',
+                          style: const TextStyle(
+                            color: Colors.lightBlueAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        TextSpan(
+                          text: m.text,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _chatCtrl,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    onSubmitted: (_) => _sendChat(),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: 'Nhập tin nhắn...',
+                      hintStyle: TextStyle(color: Colors.white38),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue),
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.lightBlueAccent),
+                  onPressed: _sendChat,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -162,12 +352,14 @@ class GameMapPainter extends CustomPainter {
   final int playerY;
   final int cols;
   final int rows;
+  final List<NearbyPlayer> others;
 
   const GameMapPainter({
     required this.playerX,
     required this.playerY,
     required this.cols,
     required this.rows,
+    this.others = const [],
   });
 
   static const double tileSize = 40.0;
@@ -177,6 +369,7 @@ class GameMapPainter extends CustomPainter {
     final paintA = Paint()..color = const Color(0xFF228B22);
     final paintB = Paint()..color = const Color(0xFF1A6B1A);
     final playerPaint = Paint()..color = Colors.cyan;
+    final otherPaint = Paint()..color = Colors.orangeAccent;
 
     for (int row = 0; row < rows; row++) {
       for (int col = 0; col < cols; col++) {
@@ -190,7 +383,17 @@ class GameMapPainter extends CustomPainter {
       }
     }
 
-    // Draw player
+    // Draw other players first so the local player renders on top.
+    for (final o in others) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+            o.x * tileSize + 4, o.y * tileSize + 4, tileSize - 8, tileSize - 8),
+        otherPaint,
+      );
+      _drawName(canvas, o.name, o.x * tileSize, o.y * tileSize);
+    }
+
+    // Draw local player
     final px = playerX * tileSize + 4;
     final py = playerY * tileSize + 4;
     canvas.drawRect(
@@ -199,8 +402,25 @@ class GameMapPainter extends CustomPainter {
     );
   }
 
+  void _drawName(Canvas canvas, String name, double tileLeft, double tileTop) {
+    if (name.isEmpty) return;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: name,
+        style: const TextStyle(color: Colors.white, fontSize: 10),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(tileLeft + (tileSize - tp.width) / 2, tileTop - 12),
+    );
+  }
+
   @override
   bool shouldRepaint(GameMapPainter oldDelegate) {
-    return oldDelegate.playerX != playerX || oldDelegate.playerY != playerY;
+    return oldDelegate.playerX != playerX ||
+        oldDelegate.playerY != playerY ||
+        !identical(oldDelegate.others, others);
   }
 }

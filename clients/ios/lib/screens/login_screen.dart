@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config.dart';
 import '../models/game_state.dart';
 import '../services/api_service.dart';
 import '../services/tcp_service.dart';
@@ -18,9 +19,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   late TcpService _tcp;
 
-  static const _serverHost = 'localhost';
-  static const _tcpPort = 9090;
-  static const _restPort = 8080;
+  // Server host/ports are centralized in lib/config.dart (AppConfig).
+  static const _serverHost = AppConfig.serverHost;
+  static const _tcpPort = AppConfig.tcpPort;
+  static const _restPort = AppConfig.restPort;
 
   @override
   void initState() {
@@ -44,31 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context.read<GameState>().updateFromAuthJson(json);
       await _tcp.connect(_serverHost, _tcpPort);
       _tcp.sendLogin(_userCtrl.text.trim(), _passCtrl.text);
-      _tcp.onPacket = (int op, payload) {
-        if (op == 0x81) {
-          // AUTH_OK
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MapScreen(tcpService: _tcp),
-              ),
-            );
-          }
-        } else if (op == 0xFF) {
-          if (payload.length >= 2) {
-            final msgLen = (payload[0] << 8) | payload[1];
-            final end = 2 + msgLen;
-            if (payload.length >= end) {
-              final msg = String.fromCharCodes(payload.sublist(2, end));
-              if (mounted) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text(msg)));
-              }
-            }
-          }
-        }
-      };
+      _wireAuthHandlers();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -92,16 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context.read<GameState>().updateFromAuthJson(json);
       await _tcp.connect(_serverHost, _tcpPort);
       _tcp.sendLogin(_userCtrl.text.trim(), _passCtrl.text);
-      _tcp.onPacket = (int op, payload) {
-        if (op == 0x81 && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MapScreen(tcpService: _tcp),
-            ),
-          );
-        }
-      };
+      _wireAuthHandlers();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -110,6 +79,35 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Register TCP callbacks that handle the binary AUTH_OK body (and login
+  /// errors). On AUTH_OK we reconcile the authoritative server fields into
+  /// GameState and navigate to the map. The raw onPacket handler is left for
+  /// MapScreen/BattleScreen to take over once navigation completes.
+  void _wireAuthHandlers() {
+    _tcp.onAuthOk = (auth) {
+      if (!mounted) return;
+      context.read<GameState>().applyAuthOk(
+            auth.token,
+            auth.level,
+            auth.kimTien,
+            auth.mapId,
+            auth.posX,
+            auth.posY,
+          );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MapScreen(tcpService: _tcp),
+        ),
+      );
+    };
+    _tcp.onError = (msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    };
   }
 
   @override
