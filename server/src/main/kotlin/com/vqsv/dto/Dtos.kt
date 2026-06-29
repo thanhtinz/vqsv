@@ -160,6 +160,30 @@ data class WsMessage(
     val payload: Any? = null
 )
 
+// ---- Quests ----
+data class QuestDto(
+    val id: Short,
+    val name: String,
+    val description: String?,
+    val giverNpcId: Short,
+    val objectiveType: String,
+    val objectiveTarget: Short,
+    val objectiveCount: Int,
+    val progress: Int,
+    val rewardGold: Int,
+    val rewardExp: Int,
+    val rewardItemId: Short?,
+    val status: String   // AVAILABLE | IN_PROGRESS | COMPLETED | CLAIMED
+)
+
+data class QuestClaimResult(
+    val questId: Short,
+    val rewardGold: Int,
+    val rewardExp: Int,
+    val rewardItemId: Short?,
+    val message: String
+)
+
 data class ChatRequest(
     @field:NotBlank @field:Size(max = 128)
     val text: String

@@ -141,6 +141,38 @@ class BattleController(private val battleService: BattleService) {
 }
 
 // ============================================================
+// QUEST CONTROLLER
+// ============================================================
+@RestController
+@RequestMapping("/api/quests")
+class QuestController(private val questService: com.vqsv.game.quest.QuestService) {
+
+    /** The player's full quest log. */
+    @GetMapping
+    fun log(auth: Authentication): ResponseEntity<List<QuestDto>> =
+        ResponseEntity.ok(questService.log(auth.principal as Long))
+
+    /** Quests an NPC is offering that the player may take. */
+    @GetMapping("/available/{npcId}")
+    fun available(@PathVariable npcId: Short, auth: Authentication): ResponseEntity<List<QuestDto>> =
+        ResponseEntity.ok(questService.availableFrom(auth.principal as Long, npcId))
+
+    @PostMapping("/{questId}/accept")
+    fun accept(@PathVariable questId: Short, auth: Authentication): ResponseEntity<Any> {
+        val dto = questService.accept(auth.principal as Long, questId)
+            ?: return ResponseEntity.badRequest().body(mapOf("error" to "Không thể nhận nhiệm vụ này"))
+        return ResponseEntity.ok(dto)
+    }
+
+    @PostMapping("/{questId}/claim")
+    fun claim(@PathVariable questId: Short, auth: Authentication): ResponseEntity<Any> {
+        val res = questService.claim(auth.principal as Long, questId)
+            ?: return ResponseEntity.badRequest().body(mapOf("error" to "Nhiệm vụ chưa hoàn thành"))
+        return ResponseEntity.ok(res)
+    }
+}
+
+// ============================================================
 // SHOP CONTROLLER
 // ============================================================
 @RestController

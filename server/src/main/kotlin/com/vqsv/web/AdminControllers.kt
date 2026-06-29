@@ -218,7 +218,8 @@ class AdminGameController(
     private val shopRepo: ShopListingRepository,
     private val npcRepo: NpcRepository,
     private val enemyRepo: NpcEnemyTemplateRepository,
-    private val warpRepo: MapWarpRepository
+    private val warpRepo: MapWarpRepository,
+    private val questRepo: QuestRepository
 ) {
     // ----- Maps -----
     @GetMapping("/maps") fun maps(): List<GameMap> = mapRepo.findAll()
@@ -263,4 +264,9 @@ class AdminGameController(
     @GetMapping("/warps") fun warps(): List<MapWarp> = warpRepo.findAll()
     @PostMapping("/warps") fun saveWarp(@RequestBody w: MapWarp): MapWarp = warpRepo.save(w)
     @DeleteMapping("/warps/{id}") fun delWarp(@PathVariable id: Int): ResponseEntity<Void> { warpRepo.deleteById(id); return ResponseEntity.noContent().build() }
+
+    // ----- Quests -----
+    @GetMapping("/quests") fun quests(): List<Quest> = questRepo.findAll()
+    @PostMapping("/quests") fun saveQuest(@RequestBody q: Quest): Quest = questRepo.save(q)
+    @DeleteMapping("/quests/{id}") fun delQuest(@PathVariable id: Short): ResponseEntity<Void> { questRepo.deleteById(id); return ResponseEntity.noContent().build() }
 }

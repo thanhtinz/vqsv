@@ -44,6 +44,8 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private var dialogNpcName: String = ""        // active NPC dialog overlay (empty = none)
     private var dialogText: String = ""
+    private var talkingNpcId: Int = 0             // the NPC we last said E to (for quest offers)
+    private var availableQuests: List<com.vqsv.core.net.RestClient.QuestInfo> = emptyList()
 
     private val PLACEHOLDER_TILE = 32f
     private val MAP_COLS = 20
@@ -153,7 +155,7 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             font.draw(batch, "Online: " + onlineHere.joinToString(", ") { it.name }.take(60), 6f, h - 24f)
             font.color = Color.WHITE
         }
-        font.draw(batch, "WASD | E:Noi chuyen P:Shop B:Tui M:Menu T:Chat F:PvP", 6f, 22f)
+        font.draw(batch, "WASD | E:Noi chuyen Q:Nhiem vu P:Shop B:Tui M:Menu T:Chat F:PvP", 6f, 22f)
         // Contextual prompts (original walk-up-to-interact behaviour).
         adjacentTrainer()?.let {
             font.color = Color.ORANGE
@@ -184,6 +186,11 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             dialogText.split("\n").forEachIndexed { i, line ->
                 font.draw(batch, line, 32f, 108f - i * 18f)
             }
+            availableQuests.firstOrNull()?.let {
+                font.color = Color.LIME
+                font.draw(batch, "Y: Nhan nhiem vu \"${it.name}\"", 32f, 44f)
+                font.color = Color.WHITE
+            }
             font.color = Color.GRAY
             font.draw(batch, "[E/Enter de dong]", w - 160f, 36f)
             font.color = Color.WHITE
@@ -192,26 +199,38 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     }
 
     private fun handleInput() {
-        // An open NPC dialog captures input: any of E/Enter/Esc closes it.
+        // An open NPC dialog captures input.
         if (dialogNpcName.isNotEmpty()) {
+            // Y accepts the first quest this NPC is offering.
+            if (Gdx.input.isKeyJustPressed(Keys.Y) && availableQuests.isNotEmpty()) {
+                val q = availableQuests.first()
+                game.rest.acceptQuest(GameState.token, q.id) { ok, _ ->
+                    Gdx.app.postRunnable { chatLog.add(if (ok) "Da nhan nhiem vu: ${q.name}" else "Khong the nhan nhiem vu") }
+                }
+                dialogNpcName = ""; dialogText = ""; availableQuests = emptyList(); return
+            }
+            // Any of E/Enter/Esc closes it.
             if (Gdx.input.isKeyJustPressed(Keys.E) || Gdx.input.isKeyJustPressed(Keys.ENTER) ||
                 Gdx.input.isKeyJustPressed(Keys.ESCAPE)) {
-                dialogNpcName = ""; dialogText = ""
+                dialogNpcName = ""; dialogText = ""; availableQuests = emptyList()
             }
             return
         }
         // E: talk to the NPC you are standing next to (walk up to interact).
         if (Gdx.input.isKeyJustPressed(Keys.E)) {
             val n = adjacentNpc()
-            if (n != null) game.tcp.sendTalkNpc(n.id)
+            if (n != null) { talkingNpcId = n.id; game.tcp.sendTalkNpc(n.id) }
             else chatLog.add("Khong co ai gan day de noi chuyen")
             return
         }
+        // Q: open the quest log.
+        if (Gdx.input.isKeyJustPressed(Keys.Q)) { game.setScreen(QuestScreen(game)); return }
         // Menu / shop / bag.
         if (Gdx.input.isKeyJustPressed(Keys.M)) {
             game.setScreen(UiScreen(game, "gamemenu", onBack = { game.setScreen(MapScreen(game)) }, menuItems = listOf(
                 "Cua hang" to { game.setScreen(ShopScreen(game)) },
                 "Sung vat / Tui do" to { game.setScreen(PetsScreen(game)) },
+                "Nhiem vu" to { game.setScreen(QuestScreen(game)) },
                 "Tro lai ban do" to { game.setScreen(MapScreen(game)) }
             ))); return
         }
@@ -300,7 +319,11 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     }
     override fun onEnemySwap(name: String, hpMax: Int, spriteId: Int) {}
     override fun onNpcDialog(npcName: String, dialog: String, npcType: Int) {
-        Gdx.app.postRunnable { dialogNpcName = npcName; dialogText = dialog }
+        Gdx.app.postRunnable { dialogNpcName = npcName; dialogText = dialog; availableQuests = emptyList() }
+        // Does this NPC have a quest to offer? Fetch it so the dialog can prompt.
+        if (talkingNpcId > 0) game.rest.getAvailableQuests(GameState.token, talkingNpcId) { list, _ ->
+            Gdx.app.postRunnable { availableQuests = list ?: emptyList() }
+        }
     }
     override fun onPong() {}
     override fun onError(msg: String) {}

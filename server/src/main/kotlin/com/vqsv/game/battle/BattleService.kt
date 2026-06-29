@@ -61,7 +61,10 @@ class BattleService(
     private val badgeRepo: BadgeRepository,
     private val playerBadgeRepo: PlayerBadgeRepository,
     private val npcEnemyTemplateRepo: NpcEnemyTemplateRepository,
-    private val skillService: SkillService
+    private val skillService: SkillService,
+    // Optional: when present, wild wins advance KILL_MOB quests. Nullable so unit
+    // tests can construct the service without the quest layer.
+    private val questService: com.vqsv.game.quest.QuestService? = null
 ) {
     // In-memory battle sessions (can move to Redis for multi-node)
     private val activeBattles = ConcurrentHashMap<String, BattleSession>()
@@ -469,6 +472,9 @@ class BattleService(
                 ))
 
                 checkBattleBadges(player.id)
+
+                // Advance any KILL_MOB quests for this wild monster.
+                session.enemyTemplateId?.let { questService?.recordKill(session.playerId, it) }
             }
 
             "CAUGHT" -> {

@@ -122,3 +122,72 @@ data class TrainerPartyMember(
     @Column(nullable = false)
     var slot: Short = 0
 )
+
+// Quest given by an NPC. Faithful "săn quái / thu thập / đạt cấp" objectives.
+@Entity
+@Table(name = "quests")
+data class Quest(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Short = 0,
+
+    @Column(nullable = false, length = 64)
+    var name: String = "",
+
+    // Which NPC hands this quest out.
+    @Column(name = "giver_npc_id", nullable = false)
+    var giverNpcId: Short = 0,
+
+    @Column(columnDefinition = "TEXT")
+    var description: String? = null,
+
+    // KILL_MOB (target = pet template id) | COLLECT_ITEM (target = item id) | REACH_LEVEL (target = level)
+    @Column(name = "objective_type", nullable = false, length = 16)
+    var objectiveType: String = "KILL_MOB",
+
+    @Column(name = "objective_target", nullable = false)
+    var objectiveTarget: Short = 0,
+
+    @Column(name = "objective_count", nullable = false)
+    var objectiveCount: Int = 1,
+
+    @Column(name = "reward_gold", nullable = false)
+    var rewardGold: Int = 0,
+
+    @Column(name = "reward_exp", nullable = false)
+    var rewardExp: Int = 0,
+
+    @Column(name = "reward_item_id")
+    var rewardItemId: Short? = null,
+
+    @Column(name = "required_level", nullable = false)
+    var requiredLevel: Short = 1,
+
+    // Must have CLAIMED this quest first (null = no prerequisite).
+    @Column(name = "prerequisite_quest_id")
+    var prerequisiteQuestId: Short? = null
+)
+
+// A player's progress on a quest. Status: IN_PROGRESS | COMPLETED | CLAIMED.
+@Entity
+@Table(name = "player_quests")
+@IdClass(PlayerQuestId::class)
+data class PlayerQuest(
+    @Id
+    @Column(name = "player_id")
+    val playerId: Long = 0,
+
+    @Id
+    @Column(name = "quest_id")
+    val questId: Short = 0,
+
+    @Column(nullable = false)
+    var progress: Int = 0,
+
+    @Column(nullable = false, length = 16)
+    var status: String = "IN_PROGRESS"
+)
+
+data class PlayerQuestId(
+    val playerId: Long = 0,
+    val questId: Short = 0
+) : java.io.Serializable

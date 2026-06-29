@@ -82,6 +82,21 @@ class RestClient(private val baseUrl: String) {
         val enemyTemplateId: Int? = null
     )
 
+    data class QuestInfo(
+        val id: Int = 0,
+        val name: String = "",
+        val description: String? = null,
+        val giverNpcId: Int = 0,
+        val objectiveType: String = "",
+        val objectiveTarget: Int = 0,
+        val objectiveCount: Int = 1,
+        val progress: Int = 0,
+        val rewardGold: Int = 0,
+        val rewardExp: Int = 0,
+        val rewardItemId: Int? = null,
+        val status: String = ""   // AVAILABLE | IN_PROGRESS | COMPLETED | CLAIMED
+    )
+
     private val client = OkHttpClient()
     private val gson = Gson()
     private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -174,6 +189,34 @@ class RestClient(private val baseUrl: String) {
 
     fun evolvePet(token: String, petId: Long, cb: (PetInfo?, String?) -> Unit) {
         postRaw("$baseUrl/api/pets/$petId/evolve", "{}", token) { s, err -> parse(s, err, PetInfo::class.java, cb) }
+    }
+
+    fun getQuests(token: String, cb: (List<QuestInfo>?, String?) -> Unit) {
+        get("$baseUrl/api/quests", token) { body, err ->
+            if (err != null) { cb(null, err); return@get }
+            try {
+                val type = object : TypeToken<List<QuestInfo>>() {}.type
+                cb(gson.fromJson(body, type), null)
+            } catch (e: Exception) { cb(null, e.message) }
+        }
+    }
+
+    fun getAvailableQuests(token: String, npcId: Int, cb: (List<QuestInfo>?, String?) -> Unit) {
+        get("$baseUrl/api/quests/available/$npcId", token) { body, err ->
+            if (err != null) { cb(null, err); return@get }
+            try {
+                val type = object : TypeToken<List<QuestInfo>>() {}.type
+                cb(gson.fromJson(body, type), null)
+            } catch (e: Exception) { cb(null, e.message) }
+        }
+    }
+
+    fun acceptQuest(token: String, questId: Int, cb: (Boolean, String?) -> Unit) {
+        postRaw("$baseUrl/api/quests/$questId/accept", "{}", token) { _, err -> cb(err == null, err) }
+    }
+
+    fun claimQuest(token: String, questId: Int, cb: (Boolean, String?) -> Unit) {
+        postRaw("$baseUrl/api/quests/$questId/claim", "{}", token) { _, err -> cb(err == null, err) }
     }
 
     /** Parse a raw body into [T] and invoke the typed callback. */

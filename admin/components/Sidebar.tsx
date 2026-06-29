@@ -50,6 +50,7 @@ const groups: NavGroup[] = [
       { href: "/game/wild-pets", label: "Sủng vật hoang" },
       { href: "/game/shop", label: "Cửa hàng game" },
       { href: "/game/npcs", label: "NPC" },
+      { href: "/game/quests", label: "Nhiệm vụ" },
       { href: "/game/enemies", label: "Quái" },
       { href: "/game/warps", label: "Cổng dịch chuyển" },
     ],

@@ -3,6 +3,9 @@ package com.vqsv.repository
 import com.vqsv.entity.MapWarp
 import com.vqsv.entity.Npc
 import com.vqsv.entity.NpcEnemyTemplate
+import com.vqsv.entity.PlayerQuest
+import com.vqsv.entity.PlayerQuestId
+import com.vqsv.entity.Quest
 import com.vqsv.entity.Skill
 import com.vqsv.entity.TrainerPartyMember
 import org.springframework.data.jpa.repository.JpaRepository
@@ -31,4 +34,15 @@ interface SkillRepository : JpaRepository<Skill, Short> {
 @Repository
 interface TrainerPartyRepository : JpaRepository<TrainerPartyMember, Int> {
     fun findByNpcIdOrderBySlotAsc(npcId: Short): List<TrainerPartyMember>
+}
+
+@Repository
+interface QuestRepository : JpaRepository<Quest, Short> {
+    fun findByGiverNpcId(giverNpcId: Short): List<Quest>
+}
+
+@Repository
+interface PlayerQuestRepository : JpaRepository<PlayerQuest, PlayerQuestId> {
+    fun findByPlayerId(playerId: Long): List<PlayerQuest>
+    fun findByPlayerIdAndStatus(playerId: Long, status: String): List<PlayerQuest>
 }
