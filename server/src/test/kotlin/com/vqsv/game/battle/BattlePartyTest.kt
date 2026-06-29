@@ -84,4 +84,38 @@ class BattlePartyTest {
         assertTrue(result.log.any { it.contains("Tung") }, "the next pet should be sent out")
         assertEquals(20, result.playerPetHp, "HP shown should be the new active pet's")
     }
+
+    @Test
+    fun `voluntary switch brings in the chosen pet and costs a turn`() {
+        val petRepo = mock(PlayerPetRepository::class.java)
+        val tmplRepo = mock(PetTemplateRepository::class.java)
+        val skillRepo = mock(SkillRepository::class.java)
+        `when`(skillRepo.findByElement(0)).thenReturn(emptyList())
+        val skillService = SkillService(skillRepo)
+
+        val pet1 = pet(1L, 0, 100, "P1")
+        val pet2 = pet(2L, 1, 100, "P2")
+        `when`(petRepo.findByPlayerIdAndSlot(100L, 0)).thenReturn(Optional.of(pet1))
+        `when`(petRepo.findByPlayerIdAndSlot(100L, 1)).thenReturn(Optional.of(pet2))
+        `when`(petRepo.findById(1L)).thenReturn(Optional.of(pet1))
+        `when`(petRepo.findById(2L)).thenReturn(Optional.of(pet2))
+        `when`(petRepo.findByPlayerIdOrdered(100L)).thenReturn(listOf(pet1, pet2))
+        `when`(petRepo.save(any(PlayerPet::class.java))).thenAnswer { it.getArgument(0) }
+        val weakEnemy = template(strong = false)   // atk 1, slow -> incoming pet survives
+        `when`(tmplRepo.findById(9.toShort())).thenReturn(Optional.of(weakEnemy))
+
+        val svc = BattleService(
+            mock(PlayerRepository::class.java), petRepo, tmplRepo,
+            mock(PlayerItemRepository::class.java), mock(BattleLogRepository::class.java),
+            mock(BadgeRepository::class.java), mock(PlayerBadgeRepository::class.java),
+            mock(NpcEnemyTemplateRepository::class.java), skillService
+        )
+        val session = svc.startPveBattle(100L, 9, 5)
+
+        val result = svc.processTurn(100L, BattleAction(session.battleId, "SWITCH", petSlot = 1))
+
+        assertEquals("ONGOING", result.status)
+        assertTrue(result.log.any { it.contains("Đổi sang") }, "the swap should be reported")
+        assertTrue(result.playerPetHp in 90..100, "the new active pet took only the free hit")
+    }
 }

@@ -47,6 +47,13 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private var pickingSkill = false
     private var skills: List<RestClient.SkillInfo> = emptyList()
     private var skillSelected = 0
+
+    // --- party / pet-switch (action 5 = SWITCH; sends the target slot) ---
+    private var party: List<RestClient.PetInfo> = emptyList()
+    private var activePetId: Long = -1L
+    private var pickingSwitch = false
+    private var switchSelected = 0
+    private fun switchable() = party.filter { (it.id as? Number)?.toLong() != activePetId && it.hp > 0 }
     private var playerHp = GameState.battlePlayerHp
     private var enemyHp = GameState.battleEnemyHp
     // Captured once at battle start; battleEnemyHp itself is later overwritten with
@@ -68,22 +75,38 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
             if (sid >= 0) GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
         }
 
-        // Load the player's active pet (slot 0): sprite + its learned skills (PvE only;
-        // PvP combat resolves server-side without skill selection for now).
+        // Load the player's party; the active pet (lowest slot) drives the sprite +
+        // skill menu. (PvP combat resolves server-side without skills/switch for now.)
         if (GameState.token.isNotEmpty()) {
             game.rest.getMyPets(GameState.token) { pets, _ ->
-                val active = pets?.minByOrNull { it.slot } ?: pets?.firstOrNull() ?: return@getMyPets
-                val petId = (active.id as? Number)?.toLong()
-                Gdx.app.postRunnable {
-                    GameState.playerPetSpriteId = active.spriteId
-                    if (GameAssets.available()) GameAssets.sprite(active.spriteId)?.let { playerAnim = SpriteAnimator(it) }
-                }
-                if (petId != null && !GameState.battleIsPvp) {
-                    game.rest.getPetSkills(GameState.token, petId) { sk, _ ->
-                        Gdx.app.postRunnable { skills = sk ?: emptyList() }
-                    }
-                }
+                party = pets ?: emptyList()
+                val active = party.minByOrNull { it.slot } ?: party.firstOrNull() ?: return@getMyPets
+                loadActivePet(active)
             }
+        }
+    }
+
+    /** Point the on-screen sprite + skill menu at [pet] (the new active pet). */
+    private fun loadActivePet(pet: RestClient.PetInfo) {
+        val petId = (pet.id as? Number)?.toLong() ?: return
+        activePetId = petId
+        Gdx.app.postRunnable {
+            GameState.playerPetSpriteId = pet.spriteId
+            if (GameAssets.available()) GameAssets.sprite(pet.spriteId)?.let { playerAnim = SpriteAnimator(it) }
+        }
+        if (!GameState.battleIsPvp) {
+            game.rest.getPetSkills(GameState.token, petId) { sk, _ ->
+                Gdx.app.postRunnable { skills = sk ?: emptyList() }
+            }
+        }
+    }
+
+    /** Re-read the party and re-point at the active pet (after an auto send-next). */
+    private fun refreshActivePet() {
+        if (GameState.token.isEmpty()) return
+        game.rest.getMyPets(GameState.token) { pets, _ ->
+            party = pets ?: emptyList()
+            party.filter { it.hp > 0 }.minByOrNull { it.slot }?.let { loadActivePet(it) }
         }
     }
 
@@ -185,7 +208,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         font.color = Color.LIGHT_GRAY
         font.draw(batch, when {
             waitingForServer -> "Dang cho server..."
-            !GameState.battleIsPvp -> "Mui ten chon, ENTER xac nhan | S: Ky nang"
+            !GameState.battleIsPvp -> "ENTER xac nhan | S: Ky nang | C: Doi pet"
             else -> "Mui ten chon, ENTER/SPACE xac nhan"
         }, 5f, sh - 5f)
 
@@ -205,6 +228,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
         if (pickingItem) drawItemPicker(sw, sh)
         if (pickingSkill) drawSkillPicker(sw, sh)
+        if (pickingSwitch) drawSwitchPicker(sw, sh)
     }
 
     private fun drawItemPicker(sw: Float, sh: Float) {
@@ -237,11 +261,18 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private fun handleInput() {
         if (pickingItem) { handlePicker(); return }
         if (pickingSkill) { handleSkillPicker(); return }
+        if (pickingSwitch) { handleSwitchPicker(); return }
         if (waitingForServer) return
         // S opens the skill menu (PvE only; PvP resolves server-side).
         if (Gdx.input.isKeyJustPressed(Keys.S) && !GameState.battleIsPvp) {
             if (skills.isEmpty()) GameState.battleLog.add("Chua hoc ky nang nao")
             else { skillSelected = 0; pickingSkill = true }
+            return
+        }
+        // C opens the pet-switch menu (PvE only).
+        if (Gdx.input.isKeyJustPressed(Keys.C) && !GameState.battleIsPvp) {
+            if (switchable().isEmpty()) GameState.battleLog.add("Khong co pet de doi")
+            else { switchSelected = 0; pickingSwitch = true }
             return
         }
         if (Gdx.input.isKeyJustPressed(Keys.LEFT))  selectedAction = ((selectedAction - 1 + 4) % 4)
@@ -312,6 +343,51 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         }
     }
 
+    private fun handleSwitchPicker() {
+        val list = switchable()
+        if (Gdx.input.isKeyJustPressed(Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Keys.BACK)) { pickingSwitch = false; return }
+        if (list.isEmpty()) { pickingSwitch = false; return }
+        if (Gdx.input.isKeyJustPressed(Keys.UP)) switchSelected = (switchSelected - 1 + list.size) % list.size
+        if (Gdx.input.isKeyJustPressed(Keys.DOWN)) switchSelected = (switchSelected + 1) % list.size
+        if (Gdx.input.isKeyJustPressed(Keys.ENTER) || Gdx.input.isKeyJustPressed(Keys.SPACE)) {
+            val pet = list.getOrNull(switchSelected) ?: return
+            val battleId = GameState.currentBattleId ?: return
+            // Action 5 = SWITCH; the optional field carries the target slot.
+            game.tcp.sendBattleAct(battleId, 5, pet.slot)
+            loadActivePet(pet)            // we know the new pet -> refresh sprite + skills now
+            waitingForServer = true
+            pickingSwitch = false
+        }
+    }
+
+    private fun drawSwitchPicker(sw: Float, sh: Float) {
+        val list = switchable()
+        val rowH = 26f
+        val boxW = sw * 0.7f
+        val boxX = sw * 0.15f
+        val boxTop = sh * 0.62f
+        shapeRenderer.projectionMatrix = hudCam.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Color(0f, 0f, 0f, 0.85f)
+        shapeRenderer.rect(boxX, boxTop - list.size * rowH - 10f, boxW, list.size * rowH + 40f)
+        list.forEachIndexed { i, _ ->
+            if (i == switchSelected) {
+                shapeRenderer.color = Color(0.2f, 0.5f, 0.3f, 1f)
+                shapeRenderer.rect(boxX, boxTop - i * rowH - rowH, boxW, rowH)
+            }
+        }
+        shapeRenderer.end()
+        batch.projectionMatrix = hudCam.combined
+        batch.begin()
+        font.color = Color.WHITE
+        font.draw(batch, "Doi pet (C/ESC dong):", boxX + 8f, boxTop + 24f)
+        list.forEachIndexed { i, p ->
+            val y = boxTop - i * rowH
+            font.draw(batch, "${p.name}  Lv.${p.level}  HP:${p.hp}/${p.hpMax}", boxX + 14f, y - 8f)
+        }
+        batch.end()
+    }
+
     private fun drawSkillPicker(sw: Float, sh: Float) {
         val rowH = 26f
         val boxW = sw * 0.7f
@@ -348,6 +424,10 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         GameState.battleEnemyHp = enemyHp
         GameState.battleLog.add(log)
         waitingForServer = false
+
+        // Auto send-next on a faint (server-driven): re-point sprite + skills at the
+        // new active pet. (Voluntary switch already refreshed locally.)
+        if (log.contains("ra trận") && !GameState.battleIsPvp) refreshActivePet()
 
         // Battle FX: floating damage + shake (rendered on the GL thread).
         Gdx.app.postRunnable {

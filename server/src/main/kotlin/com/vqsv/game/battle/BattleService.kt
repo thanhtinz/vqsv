@@ -260,13 +260,37 @@ class BattleService(
                 }
             }
 
+            "SWITCH" -> {
+                // Voluntary mid-battle pet swap (costs a turn: the enemy gets a free hit).
+                val slot = (action.petSlot ?: action.itemId) ?: throw IllegalArgumentException("Thiếu sủng vật")
+                val target = playerPetRepo.findByPlayerIdAndSlot(playerId, slot)
+                    .orElseThrow { IllegalArgumentException("Không có sủng vật ở vị trí này") }
+                if (target.id == session.activePetId) throw IllegalStateException("Sủng vật này đang chiến đấu")
+                if (target.hp <= 0) throw IllegalStateException("Sủng vật đã kiệt sức")
+                // Persist the outgoing pet's HP, then bring in the new one.
+                playerPetRepo.save(playerPet.copy(hp = session.playerPetCurrentHp.coerceAtLeast(0)))
+                session.activePetId = target.id
+                session.playerPetCurrentHp = target.hp
+                session.playerPetSkillElem = target.template.skillElem
+                session.playerPetLevel = target.level.toInt()
+                session.playerPetSpMax = skillService.spMax(target.level.toInt())
+                session.playerPetSp = session.playerPetSpMax
+                log.add("Đổi sang ${target.nickname ?: target.template.name}!")
+                val eMult = GameFormula.elementMult(session.enemyElement, target.template.element)
+                val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), target.def.toInt(), eMult)
+                session.playerPetCurrentHp -= eDmg
+                log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
+            }
+
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
         // The active pet fainted this turn -> send out the next party member, or LOSE
-        // if the whole team is down (team battle, like the original).
+        // if the whole team is down (team battle, like the original). Reload by
+        // activePetId so a mid-turn SWITCH is handled against the correct pet.
         if (session.status == "ONGOING" && session.playerPetCurrentHp <= 0) {
-            sendNextOrLose(session, playerPet, log)?.let { return it }
+            val activeNow = playerPetRepo.findByIdOrNull(session.activePetId)!!
+            sendNextOrLose(session, activeNow, log)?.let { return it }
         }
 
         // Sync the current active pet's HP back to the DB.
