@@ -112,8 +112,29 @@ class AdminPlatformController(
     private val topupRepo: TopupPackageRepository,
     private val webProductRepo: WebShopProductRepository,
     private val newsRepo: NewsPostRepository,
-    private val eventRepo: EventPostRepository
+    private val eventRepo: EventPostRepository,
+    private val paymentSettingsRepo: PaymentSettingsRepository
 ) {
+    // ----- Payment settings (SePay) — configured here, not in code/env -----
+    @GetMapping("/payment-settings")
+    fun paymentSettings(): PaymentSettingsDto {
+        val s = paymentSettingsRepo.findById(1).orElseGet { PaymentSettings() }
+        return PaymentSettingsDto(s.enabled, s.sepayApiKey, s.bankAccount, s.bankCode, s.accountHolder, s.prefix)
+    }
+
+    @PutMapping("/payment-settings")
+    fun savePaymentSettings(@RequestBody dto: PaymentSettingsDto): PaymentSettingsDto {
+        val s = paymentSettingsRepo.findById(1).orElseGet { PaymentSettings() }
+        s.enabled = dto.enabled
+        s.sepayApiKey = dto.sepayApiKey.trim()
+        s.bankAccount = dto.bankAccount.trim()
+        s.bankCode = dto.bankCode.trim()
+        s.accountHolder = dto.accountHolder.trim()
+        s.prefix = dto.prefix.trim().ifBlank { "VQSV" }
+        paymentSettingsRepo.save(s)
+        return paymentSettings()
+    }
+
     // ----- Giftcodes -----
     @GetMapping("/giftcodes")
     fun giftcodes(): List<Giftcode> = giftcodeRepo.findAll()

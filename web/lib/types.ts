@@ -108,6 +108,12 @@ export interface TopupOrderResult {
   amountVnd: number;
   payUrl: string;
   status: string;
+  provider?: string;
+  bankAccount?: string | null;
+  bankCode?: string | null;
+  accountHolder?: string | null;
+  transferContent?: string | null;
+  qrUrl?: string | null;
 }
 
 export interface ShopBuyResult {

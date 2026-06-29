@@ -70,10 +70,30 @@ data class TopupPackageDto(
     val xuAmount: Int, val bonusXu: Int, val totalXu: Int
 )
 
-data class TopupOrderRequest(val packageId: Short = 0, val provider: String = "MANUAL")
+data class TopupOrderRequest(val packageId: Short = 0, val provider: String = "AUTO")
 
 data class TopupOrderResponse(
-    val transactionId: Long, val amountVnd: Int, val payUrl: String?, val status: String
+    val transactionId: Long,
+    val amountVnd: Int,
+    val payUrl: String?,
+    val status: String,
+    val provider: String = "MANUAL",
+    // SePay bank-transfer details (when provider = SEPAY)
+    val bankAccount: String? = null,
+    val bankCode: String? = null,
+    val accountHolder: String? = null,
+    val transferContent: String? = null,
+    val qrUrl: String? = null
+)
+
+// ---------- Payment settings (admin-configured; nothing in code/env) ----------
+data class PaymentSettingsDto(
+    val enabled: Boolean = false,
+    val sepayApiKey: String = "",
+    val bankAccount: String = "",
+    val bankCode: String = "",
+    val accountHolder: String = "",
+    val prefix: String = "VQSV"
 )
 
 // ---------- Web shop ----------

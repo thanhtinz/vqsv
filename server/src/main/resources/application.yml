@@ -39,13 +39,8 @@ vqsv:
     password: ${ADMIN_PASSWORD:}
   tcp:
     port: ${TCP_PORT:9090} # J2ME binary gateway port
-  payment:
-    vnpay:
-      enabled: ${VNPAY_ENABLED:false}
-      tmn-code: ${VNPAY_TMN_CODE:}
-      hash-secret: ${VNPAY_HASH_SECRET:}
-      pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/web/public/topup/vnpay/return}
+  # Payment (SePay) is configured at runtime from the admin panel (payment_settings
+  # table) — there is intentionally nothing to configure here or in env.
   game:
     tick-rate-ms: 100         # game loop 10 tick/s
     max-players-per-map: 50

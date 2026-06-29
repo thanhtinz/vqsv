@@ -29,6 +29,7 @@ const groups: NavGroup[] = [
     items: [
       { href: "/giftcodes", label: "Giftcode" },
       { href: "/topup-packages", label: "Gói nạp" },
+      { href: "/payment-settings", label: "Cấu hình thanh toán" },
       { href: "/webshop", label: "Webshop" },
       { href: "/grant", label: "Tặng quà" },
     ],

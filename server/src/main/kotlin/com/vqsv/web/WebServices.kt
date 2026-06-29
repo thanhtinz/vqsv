@@ -195,10 +195,10 @@ class TopupService(
     private val packageRepo: TopupPackageRepository,
     private val paymentRepo: PaymentTransactionRepository,
     private val accountRepo: AccountRepository,
-    private val providers: List<com.vqsv.web.payment.PaymentProvider>
+    private val settingsRepo: PaymentSettingsRepository
 ) {
-    private val providerMap by lazy { providers.associateBy { it.name.uppercase() } }
-    fun providerByName(name: String) = providerMap[name.uppercase()]
+    /** The single payment-settings row (id=1), configured from the admin panel. */
+    fun settings(): PaymentSettings = settingsRepo.findById(1).orElseGet { PaymentSettings() }
 
     fun packages(): List<TopupPackageDto> =
         packageRepo.findByActiveTrueOrderBySortOrderAsc().map {
@@ -209,39 +209,61 @@ class TopupService(
     fun createOrder(accountId: Long, req: TopupOrderRequest): TopupOrderResponse {
         val pkg = packageRepo.findById(req.packageId).orElseThrow { IllegalArgumentException("Gói nạp không tồn tại") }
         if (!pkg.active) throw IllegalStateException("Gói nạp đã ngừng bán")
+        val s = settings()
+        val sepay = s.enabled && s.bankAccount.isNotBlank()
         val tx = paymentRepo.save(PaymentTransaction(
             accountId = accountId,
             packageId = pkg.id,
             amountVnd = pkg.priceVnd,
             xuGranted = pkg.xuAmount + pkg.bonusXu,
-            provider = req.provider,
+            provider = if (sepay) "SEPAY" else "MANUAL",
             status = "PENDING",
             note = "Nạp gói ${pkg.name}"
         ))
-        // Ask the chosen gateway for a real checkout URL; fall back to the manual
-        // transfer page when the provider has no redirect (e.g. MANUAL / not enabled).
-        val payUrl = providerByName(req.provider)?.createCheckoutUrl(tx)
-            ?: "/nap/thanh-toan?txid=${tx.id}"
-        return TopupOrderResponse(tx.id, tx.amountVnd, payUrl, tx.status)
+        if (!sepay) {
+            return TopupOrderResponse(tx.id, tx.amountVnd, "/nap/thanh-toan?txid=${tx.id}", tx.status, "MANUAL")
+        }
+        // SePay: the player transfers to the configured bank account with this exact
+        // content; SePay detects the incoming transfer and calls our webhook.
+        val content = "${s.prefix}${tx.id}"
+        val qrUrl = "https://qr.sepay.vn/img?acc=${enc(s.bankAccount)}&bank=${enc(s.bankCode)}" +
+            "&amount=${tx.amountVnd}&des=${enc(content)}"
+        return TopupOrderResponse(
+            tx.id, tx.amountVnd, qrUrl, tx.status, "SEPAY",
+            bankAccount = s.bankAccount, bankCode = s.bankCode, accountHolder = s.accountHolder,
+            transferContent = content, qrUrl = qrUrl
+        )
     }
 
     /**
-     * Handle a gateway callback (return URL or IPN). Verifies the signature via the
-     * provider and credits xu on success. Idempotent (confirm() ignores a tx that is
-     * already SUCCESS), so the browser return and the server IPN can both fire safely.
+     * SePay webhook: SePay calls this when money lands in the bank account. Auth is the
+     * shared API key SePay sends in the Authorization header; the order is matched by the
+     * transfer content (prefix + tx id). Idempotent and amount-checked.
      */
     @Transactional
-    fun handleCallback(providerName: String, params: Map<String, String>): Boolean {
-        val provider = providerByName(providerName) ?: return false
-        val result = provider.verifyCallback(params)
-        if (result.success && result.txId != null) {
-            confirm(result.txId, result.providerRef)
-            return true
-        }
-        return false
+    fun handleSepayWebhook(apiKey: String?, content: String?, amount: Long, transferType: String?): Boolean {
+        val s = settings()
+        if (!s.enabled || s.sepayApiKey.isBlank() || apiKey != s.sepayApiKey) return false
+        if (transferType != null && !transferType.equals("in", ignoreCase = true)) return false
+        val txId = extractTxId(content, s.prefix) ?: return false
+        val tx = paymentRepo.findById(txId).orElse(null) ?: return false
+        if (tx.status == "SUCCESS") return true            // already credited (idempotent)
+        if (tx.status != "PENDING") return false
+        if (amount < tx.amountVnd) return false            // underpaid -> ignore
+        confirm(txId, "SEPAY")
+        return true
     }
 
-    /** Marks a transaction SUCCESS and grants xu. Called by the provider webhook or an admin approval. */
+    private fun extractTxId(content: String?, prefix: String): Long? {
+        if (content.isNullOrBlank()) return null
+        val m = Regex(Regex.escape(prefix) + "(\\d+)", RegexOption.IGNORE_CASE).find(content) ?: return null
+        return m.groupValues[1].toLongOrNull()
+    }
+
+    private fun enc(v: String): String =
+        java.net.URLEncoder.encode(v, java.nio.charset.StandardCharsets.UTF_8)
+
+    /** Marks a transaction SUCCESS and grants xu. Called by the SePay webhook or an admin approval. */
     @Transactional
     fun confirm(txId: Long, providerRef: String?): PaymentTransaction {
         val tx = paymentRepo.findById(txId).orElseThrow { IllegalArgumentException("Giao dịch không tồn tại") }

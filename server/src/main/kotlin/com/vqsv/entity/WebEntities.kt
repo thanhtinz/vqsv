@@ -332,3 +332,35 @@ data class AuditLog(
     @CreationTimestamp
     val createdAt: Instant = Instant.now()
 )
+
+// ============================================================
+// PAYMENT SETTINGS (single row id=1; edited from the admin panel)
+// ============================================================
+@Entity
+@Table(name = "payment_settings")
+data class PaymentSettings(
+    @Id
+    val id: Short = 1,
+
+    @Column(nullable = false)
+    var enabled: Boolean = false,
+
+    @Column(name = "sepay_api_key", nullable = false, length = 128)
+    var sepayApiKey: String = "",
+
+    @Column(name = "bank_account", nullable = false, length = 32)
+    var bankAccount: String = "",
+
+    @Column(name = "bank_code", nullable = false, length = 32)
+    var bankCode: String = "",
+
+    @Column(name = "account_holder", nullable = false, length = 64)
+    var accountHolder: String = "",
+
+    @Column(nullable = false, length = 16)
+    var prefix: String = "VQSV",
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant = Instant.now()
+)

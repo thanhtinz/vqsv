@@ -106,37 +106,28 @@ class TopupController(private val topupService: TopupService) {
 }
 
 /**
- * Public payment-gateway callbacks (no auth — the gateway calls these; permitted by
- * the public-web rule in SecurityConfig).
- *   - {provider}/return : browser redirected here after paying -> redirect to the
- *     website result page.
- *   - {provider}/ipn    : server-to-server notify -> JSON ack (VNPAY format).
+ * Public SePay webhook (no user auth — SePay calls this when money lands in the bank
+ * account; permitted by the public-web rule in SecurityConfig). SePay authenticates
+ * with the API key configured in the admin panel, sent as `Authorization: Apikey <key>`.
  */
 @RestController
 @RequestMapping("/api/web/public/topup")
 class PublicTopupController(private val topupService: TopupService) {
 
-    @GetMapping("/{provider}/return")
-    fun gatewayReturn(
-        @PathVariable provider: String,
-        @RequestParam params: Map<String, String>
-    ): org.springframework.web.servlet.view.RedirectView {
-        val ok = runCatching { topupService.handleCallback(provider, params) }.getOrDefault(false)
-        return org.springframework.web.servlet.view.RedirectView("/nap/ket-qua?success=$ok")
-    }
-
-    @RequestMapping("/{provider}/ipn", method = [RequestMethod.GET, RequestMethod.POST])
-    fun gatewayIpn(
-        @PathVariable provider: String,
-        @RequestParam params: Map<String, String>
-    ): ResponseEntity<Map<String, String>> {
-        val ok = runCatching { topupService.handleCallback(provider, params) }.getOrDefault(false)
-        return ResponseEntity.ok(
-            mapOf(
-                "RspCode" to if (ok) "00" else "99",
-                "Message" to if (ok) "Confirm Success" else "Invalid signature or unconfirmed"
-            )
-        )
+    @PostMapping("/sepay/webhook")
+    fun sepayWebhook(
+        @RequestHeader(value = "Authorization", required = false) authorization: String?,
+        @RequestBody body: Map<String, Any?>
+    ): ResponseEntity<Map<String, Any>> {
+        val apiKey = authorization?.trim()?.removePrefix("Apikey")?.removePrefix("apikey")?.trim()
+        val content = (body["content"] ?: body["code"] ?: body["description"])?.toString()
+        val amount = (body["transferAmount"] as? Number)?.toLong()
+            ?: body["transferAmount"]?.toString()?.toDoubleOrNull()?.toLong() ?: 0L
+        val transferType = body["transferType"]?.toString()
+        val ok = runCatching {
+            topupService.handleSepayWebhook(apiKey, content, amount, transferType)
+        }.getOrDefault(false)
+        return ResponseEntity.ok(mapOf("success" to ok))
     }
 }
 

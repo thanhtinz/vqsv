@@ -4,28 +4,41 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Card, { SectionTitle } from "@/components/Card";
 import Button from "@/components/Button";
-import { Select } from "@/components/Input";
 import { Loading, ErrorMessage, EmptyState } from "@/components/Loading";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatVnd, formatXu } from "@/lib/format";
 import type { TopupPackage, TopupOrderResult } from "@/lib/types";
 
-const PROVIDERS: { value: string; label: string }[] = [
-  // VNPAY is wired to a real gateway (when enabled on the server); the rest fall
-  // back to a manual transfer that an admin confirms.
-  { value: "VNPAY", label: "VNPAY (ATM/QR/Thẻ)" },
-  { value: "MOMO", label: "Ví MoMo (thủ công)" },
-  { value: "ZALOPAY", label: "ZaloPay (thủ công)" },
-  { value: "BANKING", label: "Chuyển khoản ngân hàng" },
-  { value: "CARD", label: "Thẻ cào điện thoại" },
-];
+function Row({
+  label,
+  value,
+  mono,
+  highlight,
+}: {
+  label: string;
+  value?: string | null;
+  mono?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-white/50">{label}</span>
+      <span
+        className={`${mono ? "font-mono" : ""} ${
+          highlight ? "font-bold text-brand-light" : "text-white"
+        }`}
+      >
+        {value || "—"}
+      </span>
+    </div>
+  );
+}
 
 export default function TopupPage() {
   const { account, isAuthenticated, ready } = useAuth();
   const [packages, setPackages] = useState<TopupPackage[] | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [provider, setProvider] = useState(PROVIDERS[0].value);
 
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [orderError, setOrderError] = useState("");
@@ -48,7 +61,7 @@ export default function TopupPage() {
     try {
       const res = await apiPost<TopupOrderResult>(
         "/api/web/topup/order",
-        { packageId: pkg.id, provider },
+        { packageId: pkg.id },
         { auth: true }
       );
       setOrder(res);
@@ -78,19 +91,10 @@ export default function TopupPage() {
               {formatXu(account.balanceXu)}
             </p>
           </div>
-          <div className="w-full sm:w-64">
-            <Select
-              id="provider"
-              label="Phương thức thanh toán"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
+          <div className="text-right text-xs text-white/50">
+            Thanh toán qua chuyển khoản ngân hàng
+            <br />
+            (quét QR — cộng xu tự động)
           </div>
         </Card>
       )}
@@ -130,15 +134,47 @@ export default function TopupPage() {
               Trạng thái: <span className="text-amber-400">{order.status}</span>
             </p>
           </div>
-          <p className="mt-3 text-sm text-white/60">
-            Trong môi trường thật, bạn sẽ được chuyển tới cổng thanh toán để
-            hoàn tất giao dịch. Nhấn nút dưới đây để tiếp tục:
-          </p>
-          <div className="mt-3">
-            <Button href={order.payUrl || "#"} external>
-              Tới trang thanh toán →
-            </Button>
-          </div>
+          {order.provider === "SEPAY" ? (
+            <div className="mt-4">
+              <p className="text-sm text-white/70">
+                Quét mã QR hoặc chuyển khoản theo đúng thông tin bên dưới. Xu sẽ
+                được cộng <strong>tự động</strong> sau khi nhận được tiền.
+              </p>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                {order.qrUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={order.qrUrl}
+                    alt="QR chuyển khoản"
+                    className="h-48 w-48 rounded-lg bg-white p-2"
+                  />
+                )}
+                <div className="grid gap-1.5 text-sm">
+                  <Row label="Ngân hàng" value={order.bankCode} />
+                  <Row label="Số tài khoản" value={order.bankAccount} mono />
+                  <Row label="Chủ tài khoản" value={order.accountHolder} />
+                  <Row label="Số tiền" value={formatVnd(order.amountVnd)} />
+                  <Row label="Nội dung CK" value={order.transferContent} mono highlight />
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-amber-400/90">
+                ⚠️ Phải ghi đúng nội dung chuyển khoản{" "}
+                <span className="font-mono">{order.transferContent}</span> để hệ
+                thống tự cộng xu.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-3 text-sm text-white/60">
+                Chuyển khoản thủ công theo hướng dẫn; admin sẽ duyệt và cộng xu.
+              </p>
+              <div className="mt-3">
+                <Button href={order.payUrl || "#"} external>
+                  Tới trang thanh toán →
+                </Button>
+              </div>
+            </>
+          )}
         </Card>
       )}
 

@@ -74,3 +74,6 @@ interface EventPostRepository : JpaRepository<EventPost, Long> {
 interface AuditLogRepository : JpaRepository<AuditLog, Long> {
     fun findAllByOrderByCreatedAtDesc(pageable: Pageable): Page<AuditLog>
 }
+
+@Repository
+interface PaymentSettingsRepository : JpaRepository<PaymentSettings, Short>
