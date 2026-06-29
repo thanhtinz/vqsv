@@ -24,7 +24,12 @@ import com.vqsv.core.asset.UiRenderer
 class UiScreen(
     private val game: VqsvGame,
     private val uiName: String,
-    private val onBack: (() -> Unit)? = null
+    private val onBack: (() -> Unit)? = null,
+    // Optional actionable entries overlaid on the layout (label -> action). When
+    // provided, the screen becomes a usable menu: Up/Down to move, Enter or the
+    // matching number key to choose. Keeps menus working without hit-testing the
+    // original UI node tree.
+    private val menuItems: List<Pair<String, () -> Unit>> = emptyList()
 ) : Screen {
 
     private val shape = ShapeRenderer()
@@ -32,6 +37,7 @@ class UiScreen(
     private val font = BitmapFont()
     private val cam = OrthographicCamera()
     private var root: UiNode? = null
+    private var selected = 0
 
     override fun show() {
         resize(Gdx.graphics.width, Gdx.graphics.height)
@@ -47,6 +53,16 @@ class UiScreen(
             return
         }
 
+        // Menu navigation (only when actionable entries were supplied).
+        if (menuItems.isNotEmpty()) {
+            if (Gdx.input.isKeyJustPressed(Keys.UP)) selected = (selected - 1 + menuItems.size) % menuItems.size
+            if (Gdx.input.isKeyJustPressed(Keys.DOWN)) selected = (selected + 1) % menuItems.size
+            if (Gdx.input.isKeyJustPressed(Keys.ENTER)) { menuItems[selected].second(); return }
+            for (i in menuItems.indices) {
+                if (i < 9 && Gdx.input.isKeyJustPressed(Keys.NUM_1 + i)) { menuItems[i].second(); return }
+            }
+        }
+
         val r = root
         if (r != null) {
             shape.projectionMatrix = cam.combined
@@ -58,11 +74,25 @@ class UiScreen(
             batch.begin()
             UiRenderer.renderText(batch, font, r)
             batch.end()
-        } else {
+        } else if (menuItems.isEmpty()) {
             batch.projectionMatrix = cam.combined
             batch.begin()
             font.color = Color.WHITE
             font.draw(batch, "UI '$uiName' chua co asset", 20f, 30f)
+            batch.end()
+        }
+
+        // Overlay the actionable menu (y-down coords).
+        if (menuItems.isNotEmpty()) {
+            batch.projectionMatrix = cam.combined
+            batch.begin()
+            menuItems.forEachIndexed { i, (label, _) ->
+                font.color = if (i == selected) Color.YELLOW else Color.WHITE
+                font.draw(batch, "${i + 1}. $label", 40f, 60f + i * 28f)
+            }
+            font.color = Color.GRAY
+            font.draw(batch, "Len/Xuong chon - Enter/So de mo - ESC thoat", 40f, 60f + menuItems.size * 28f + 12f)
+            font.color = Color.WHITE
             batch.end()
         }
     }

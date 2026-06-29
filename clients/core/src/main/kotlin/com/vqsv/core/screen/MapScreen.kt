@@ -155,7 +155,11 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
     private fun handleInput() {
         // Menu / shop / bag.
         if (Gdx.input.isKeyJustPressed(Keys.M)) {
-            game.setScreen(UiScreen(game, "gamemenu") { game.setScreen(MapScreen(game)) }); return
+            game.setScreen(UiScreen(game, "gamemenu", onBack = { game.setScreen(MapScreen(game)) }, menuItems = listOf(
+                "Cua hang" to { game.setScreen(ShopScreen(game)) },
+                "Sung vat / Tui do" to { game.setScreen(PetsScreen(game)) },
+                "Tro lai ban do" to { game.setScreen(MapScreen(game)) }
+            ))); return
         }
         if (Gdx.input.isKeyJustPressed(Keys.P)) { game.setScreen(ShopScreen(game)); return }
         if (Gdx.input.isKeyJustPressed(Keys.B)) { game.setScreen(PetsScreen(game)); return }
