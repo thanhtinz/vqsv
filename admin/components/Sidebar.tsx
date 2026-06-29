@@ -46,6 +46,7 @@ const groups: NavGroup[] = [
     items: [
       { href: "/game/maps", label: "Bản đồ" },
       { href: "/game/pets", label: "Sủng vật (mẫu)" },
+      { href: "/game/skills", label: "Kỹ năng" },
       { href: "/game/items", label: "Vật phẩm" },
       { href: "/game/wild-pets", label: "Sủng vật hoang" },
       { href: "/game/shop", label: "Cửa hàng game" },

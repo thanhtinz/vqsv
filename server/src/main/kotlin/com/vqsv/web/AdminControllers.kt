@@ -219,7 +219,8 @@ class AdminGameController(
     private val npcRepo: NpcRepository,
     private val enemyRepo: NpcEnemyTemplateRepository,
     private val warpRepo: MapWarpRepository,
-    private val questRepo: QuestRepository
+    private val questRepo: QuestRepository,
+    private val skillRepo: SkillRepository
 ) {
     // ----- Maps -----
     @GetMapping("/maps") fun maps(): List<GameMap> = mapRepo.findAll()
@@ -269,4 +270,9 @@ class AdminGameController(
     @GetMapping("/quests") fun quests(): List<Quest> = questRepo.findAll()
     @PostMapping("/quests") fun saveQuest(@RequestBody q: Quest): Quest = questRepo.save(q)
     @DeleteMapping("/quests/{id}") fun delQuest(@PathVariable id: Short): ResponseEntity<Void> { questRepo.deleteById(id); return ResponseEntity.noContent().build() }
+
+    // ----- Skills -----
+    @GetMapping("/skills") fun skills(): List<Skill> = skillRepo.findAll().sortedBy { it.id }
+    @PostMapping("/skills") fun saveSkill(@RequestBody s: Skill): Skill = skillRepo.save(s)
+    @DeleteMapping("/skills/{id}") fun delSkill(@PathVariable id: Short): ResponseEntity<Void> { skillRepo.deleteById(id); return ResponseEntity.noContent().build() }
 }
