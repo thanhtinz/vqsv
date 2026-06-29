@@ -93,32 +93,58 @@ class PvpService(
                     else listOf(s.b to s.a, s.a to s.b)
         for ((atk, def) in order) {
             if (atk.hp <= 0) continue
+            // Bound / confused combatants may lose the turn.
+            if (StatusEffects.isDisabled(atk.statuses)) {
+                log.add("${atk.name} ${StatusEffects.disableLabel(atk.statuses)}, không thể hành động!")
+                continue
+            }
             val crit = GameFormula.isCrit(atk.spd)
-            // A skill overrides element + power when known and SP allows; else basic hit.
+            // Resolve the action: a skill may be offensive, a self-buff, or a debuff.
             var power = 100
             var elementName = atk.element
-            var burns = false
+            var offensive = true
+            var debuff: StatusEffect? = null
+            var selfBuff: StatusEffect? = null
             if (atk.action == 4) {
                 val skill = skillService.usableSkill(atk.skillElem, atk.level, atk.skillId)
                 if (skill != null && atk.sp >= skill.spCost) {
                     atk.sp -= skill.spCost.toInt()
-                    power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
-                    elementName = GameFormula.elementName(skill.element.toInt())
-                    burns = StatusEffects.isBurnSkill(skill.behaviorFlag.toInt(), skill.effectId?.toInt())
                     log.add("${atk.name} dùng ${skill.name}!")
+                    when (skill.behaviorFlag.toInt()) {
+                        StatusEffects.FLAG_SELF_BUFF -> {
+                            offensive = false
+                            selfBuff = StatusEffects.selfBuffFor(skill.effectId?.toInt(), atk.hpMax)
+                        }
+                        StatusEffects.FLAG_ENEMY_DEBUFF -> {
+                            power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
+                            elementName = GameFormula.elementName(skill.element.toInt())
+                            debuff = StatusEffects.debuffFor(skill.effectId?.toInt(), atk.atk)
+                        }
+                        else -> {
+                            power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
+                            elementName = GameFormula.elementName(skill.element.toInt())
+                        }
+                    }
                 }
             }
+            if (!offensive) {
+                if (selfBuff != null) { StatusEffects.apply(atk.statuses, selfBuff); log.add("${atk.name} ${StatusEffects.landedLabel(selfBuff.type)}!") }
+                continue
+            }
             val mult = GameFormula.elementMult(elementName, def.element)
-            val dmg = GameFormula.calcDamage(atk.atk, def.def, mult, crit, power)
+            val dmg = GameFormula.calcDamage(
+                StatusEffects.effectiveAtk(atk.atk, atk.statuses),
+                StatusEffects.effectiveDef(def.def, def.statuses), mult, crit, power
+            )
             def.hp -= dmg
             log.add("${atk.name} đánh ${def.name}: $dmg sát thương${if (crit) " (Chí mạng!)" else ""}")
             if (def.hp <= 0) { log.add("${def.name} đã gục!"); break }
-            if (burns) { StatusEffects.applyBurn(def.statuses, atk.atk); log.add("${def.name} bị Đốt Cháy!") }
+            if (debuff != null) { StatusEffects.apply(def.statuses, debuff); log.add("${def.name} ${StatusEffects.landedLabel(debuff.type)}!") }
         }
-        // Damage-over-time resolves at the end of the round, faster combatant first.
+        // Damage/heal-over-time resolves at the end of the round, faster combatant first.
         for (c in listOf(s.a, s.b).sortedByDescending { it.spd }) {
             if (c.hp <= 0) continue
-            c.hp -= StatusEffects.tick(c.statuses, c.name, log)
+            c.hp = (c.hp + StatusEffects.tick(c.statuses, c.name, log)).coerceAtMost(c.hpMax)
         }
         s.a.action = -1; s.b.action = -1
         s.a.skillId = -1; s.b.skillId = -1

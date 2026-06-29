@@ -49,8 +49,9 @@ data class BattleSession(
     val enemyParty: List<Short> = emptyList(),
     var enemyIndex: Int = 0,
     var pendingSwap: com.vqsv.dto.EnemySwapInfo? = null,
-    // Active status effects on the current enemy (e.g. BURN from the player's skills).
-    val enemyStatuses: MutableList<StatusEffect> = mutableListOf()
+    // Active status effects on the current enemy (debuffs) and the active pet (self-buffs).
+    val enemyStatuses: MutableList<StatusEffect> = mutableListOf(),
+    val playerStatuses: MutableList<StatusEffect> = mutableListOf()
 )
 
 @Service
@@ -191,14 +192,27 @@ class BattleService(
                 if (session.playerPetSp < skill.spCost)
                     throw IllegalStateException("Không đủ SP để dùng ${skill.name}")
                 session.playerPetSp -= skill.spCost.toInt()
-                val power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
-                val elementName = GameFormula.elementName(skill.element.toInt())
-                playerStrike(session, playerPet, log, elementName, power, "dùng ${skill.name}")
-                    ?.let { return it }
-                // A burning skill leaves the enemy on fire for several turns.
-                if (session.enemyHp > 0 && StatusEffects.isBurnSkill(skill.behaviorFlag.toInt(), skill.effectId?.toInt())) {
-                    StatusEffects.applyBurn(session.enemyStatuses, playerPet.atk.toInt())
-                    log.add("${session.enemyName} bị Đốt Cháy!")
+                val petName = playerPet.nickname ?: playerPetTemplate.name
+                if (skill.behaviorFlag.toInt() == StatusEffects.FLAG_SELF_BUFF) {
+                    // A self-buff: apply it to the active pet; the enemy still gets to act.
+                    val buff = StatusEffects.selfBuffFor(skill.effectId?.toInt(), playerPet.hpMax)
+                    if (buff != null) {
+                        StatusEffects.apply(session.playerStatuses, buff)
+                        log.add("$petName dùng ${skill.name}, ${StatusEffects.landedLabel(buff.type)}!")
+                    } else log.add("$petName dùng ${skill.name}!")
+                    enemyCounterHit(session, playerPet, log)
+                } else {
+                    val power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
+                    val elementName = GameFormula.elementName(skill.element.toInt())
+                    playerStrike(session, playerPet, log, elementName, power, "dùng ${skill.name}")
+                        ?.let { return it }
+                    // A debuffing skill (flag = 2) leaves a status on the enemy.
+                    if (session.enemyHp > 0 && skill.behaviorFlag.toInt() == StatusEffects.FLAG_ENEMY_DEBUFF) {
+                        StatusEffects.debuffFor(skill.effectId?.toInt(), playerPet.atk.toInt())?.let {
+                            StatusEffects.apply(session.enemyStatuses, it)
+                            log.add("${session.enemyName} ${StatusEffects.landedLabel(it.type)}!")
+                        }
+                    }
                 }
             }
 
@@ -296,6 +310,7 @@ class BattleService(
                 session.playerPetLevel = target.level.toInt()
                 session.playerPetSpMax = skillService.spMax(target.level.toInt())
                 session.playerPetSp = session.playerPetSpMax
+                session.playerStatuses.clear()   // a fresh pet starts with no buffs
                 log.add("Đổi sang ${target.nickname ?: target.template.name}!")
                 val eMult = GameFormula.elementMult(session.enemyElement, target.template.element)
                 val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), target.def.toInt(), eMult)
@@ -306,9 +321,16 @@ class BattleService(
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
-        // Damage-over-time (BURN etc.) resolves at the end of the turn.
-        if (session.status == "ONGOING" && session.enemyHp > 0) {
-            session.enemyHp -= StatusEffects.tick(session.enemyStatuses, session.enemyName, log)
+        // Damage/heal-over-time (BURN, REGEN, …) resolves at the end of the turn.
+        if (session.status == "ONGOING") {
+            if (session.enemyHp > 0)
+                session.enemyHp += StatusEffects.tick(session.enemyStatuses, session.enemyName, log)
+            if (session.playerPetCurrentHp > 0) {
+                val activePet = playerPetRepo.findByIdOrNull(session.activePetId)!!
+                val name = activePet.nickname ?: activePet.template.name
+                session.playerPetCurrentHp = (session.playerPetCurrentHp +
+                    StatusEffects.tick(session.playerStatuses, name, log)).coerceAtMost(activePet.hpMax)
+            }
         }
 
         // The current enemy fainted -> the trainer summons its next enemy, or WIN if
@@ -385,6 +407,7 @@ class BattleService(
         session.playerPetLevel = next.level.toInt()
         session.playerPetSpMax = skillService.spMax(next.level.toInt())
         session.playerPetSp = session.playerPetSpMax
+        session.playerStatuses.clear()   // a fresh pet starts with no buffs
         log.add("Tung ${next.nickname ?: next.template.name} ra trận!")
         return null
     }
@@ -400,16 +423,24 @@ class BattleService(
     ): BattleTurnResult? {
         val tpl = playerPet.template
         val name = playerPet.nickname ?: tpl.name
+        val pAtk = StatusEffects.effectiveAtk(playerPet.atk.toInt(), session.playerStatuses)
+        val pDef = StatusEffects.effectiveDef(playerPet.def.toInt(), session.playerStatuses)
         fun playerHit(prefix: String) {
             val crit = GameFormula.isCrit(playerPet.spd.toInt())
             val mult = GameFormula.elementMult(elementName, session.enemyElement)
-            val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit, skillPower)
+            val eDef = StatusEffects.effectiveDef(session.enemyDef.toInt(), session.enemyStatuses)
+            val dmg = GameFormula.calcDamage(pAtk, eDef, mult, crit, skillPower)
             session.enemyHp -= dmg
             log.add("$name $prefix! Gây $dmg sát thương${if (crit) " (Chí mạng!)" else ""}!")
         }
         fun enemyHit(prefix: String) {
+            // A bound / confused enemy may lose its counter.
+            if (StatusEffects.isDisabled(session.enemyStatuses)) {
+                log.add("${session.enemyName} ${StatusEffects.disableLabel(session.enemyStatuses)}, không thể hành động!")
+                return
+            }
             val eMult = GameFormula.elementMult(session.enemyElement, tpl.element)
-            val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
+            val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), pDef, eMult)
             session.playerPetCurrentHp -= eDmg
             log.add("${session.enemyName} $prefix! Gây $eDmg sát thương!")
         }
@@ -423,6 +454,20 @@ class BattleService(
             if (session.playerPetCurrentHp > 0) playerHit("phản công")
         }
         return null
+    }
+
+    /** The enemy's lone hit (used when the player spends the turn on a self-buff). */
+    private fun enemyCounterHit(session: BattleSession, playerPet: PlayerPet, log: MutableList<String>) {
+        if (session.enemyHp <= 0) return
+        if (StatusEffects.isDisabled(session.enemyStatuses)) {
+            log.add("${session.enemyName} ${StatusEffects.disableLabel(session.enemyStatuses)}, không thể hành động!")
+            return
+        }
+        val pDef = StatusEffects.effectiveDef(playerPet.def.toInt(), session.playerStatuses)
+        val eMult = GameFormula.elementMult(session.enemyElement, playerPet.template.element)
+        val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), pDef, eMult)
+        session.playerPetCurrentHp -= eDmg
+        log.add("${session.enemyName} tấn công! Gây $eDmg sát thương!")
     }
 
     @Transactional
