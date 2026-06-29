@@ -62,6 +62,16 @@ class RestClient(private val baseUrl: String) {
         val description: String? = null
     )
 
+    data class SkillInfo(
+        val id: Int = 0,
+        val name: String = "",
+        val element: Int = 0,
+        val power: Int = 0,
+        val spCost: Int = 0,
+        val requiredLevel: Int = 1,
+        val description: String? = null
+    )
+
     data class NpcInfo(
         val id: Int = 0,
         val name: String = "",
@@ -117,6 +127,16 @@ class RestClient(private val baseUrl: String) {
             if (err != null) { cb(null, err); return@get }
             try {
                 val type = object : TypeToken<List<ShopItem>>() {}.type
+                cb(gson.fromJson(body, type), null)
+            } catch (e: Exception) { cb(null, e.message) }
+        }
+    }
+
+    fun getPetSkills(token: String, petId: Long, cb: (List<SkillInfo>?, String?) -> Unit) {
+        get("$baseUrl/api/pets/$petId/skills", token) { body, err ->
+            if (err != null) { cb(null, err); return@get }
+            try {
+                val type = object : TypeToken<List<SkillInfo>>() {}.type
                 cb(gson.fromJson(body, type), null)
             } catch (e: Exception) { cb(null, e.message) }
         }

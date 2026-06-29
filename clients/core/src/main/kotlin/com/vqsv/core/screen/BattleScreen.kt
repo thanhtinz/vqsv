@@ -42,6 +42,11 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     private var pickAction = 0
     private var invItems: List<RestClient.InventoryItem> = emptyList()
     private var invSelected = 0
+
+    // --- skill picker (action 4 = SKILL; needs a skillId) ---
+    private var pickingSkill = false
+    private var skills: List<RestClient.SkillInfo> = emptyList()
+    private var skillSelected = 0
     private var playerHp = GameState.battlePlayerHp
     private var enemyHp = GameState.battleEnemyHp
     // Captured once at battle start; battleEnemyHp itself is later overwritten with
@@ -56,17 +61,27 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         enemyHp = GameState.battleEnemyHp
         enemyMaxHp = GameState.battleEnemyHp.coerceAtLeast(1)
         resize(Gdx.graphics.width, Gdx.graphics.height)
-        if (!GameAssets.available()) return
-        val sid = GameState.battleEnemySpriteId
-        if (sid >= 0) GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
 
-        // Load the player's active pet sprite (slot 0) asynchronously.
+        // Enemy sprite (needs converted assets).
+        if (GameAssets.available()) {
+            val sid = GameState.battleEnemySpriteId
+            if (sid >= 0) GameAssets.sprite(sid)?.let { enemyAnim = SpriteAnimator(it) }
+        }
+
+        // Load the player's active pet (slot 0): sprite + its learned skills (PvE only;
+        // PvP combat resolves server-side without skill selection for now).
         if (GameState.token.isNotEmpty()) {
             game.rest.getMyPets(GameState.token) { pets, _ ->
-                val active = pets?.minByOrNull { it.slot } ?: pets?.firstOrNull()
-                if (active != null) Gdx.app.postRunnable {
+                val active = pets?.minByOrNull { it.slot } ?: pets?.firstOrNull() ?: return@getMyPets
+                val petId = (active.id as? Number)?.toLong()
+                Gdx.app.postRunnable {
                     GameState.playerPetSpriteId = active.spriteId
-                    GameAssets.sprite(active.spriteId)?.let { playerAnim = SpriteAnimator(it) }
+                    if (GameAssets.available()) GameAssets.sprite(active.spriteId)?.let { playerAnim = SpriteAnimator(it) }
+                }
+                if (petId != null && !GameState.battleIsPvp) {
+                    game.rest.getPetSkills(GameState.token, petId) { sk, _ ->
+                        Gdx.app.postRunnable { skills = sk ?: emptyList() }
+                    }
                 }
             }
         }
@@ -168,8 +183,11 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
         // Hint
         font.color = Color.LIGHT_GRAY
-        font.draw(batch, if (waitingForServer) "Dang cho server..." else "Mui ten chon, ENTER/SPACE xac nhan",
-            5f, sh - 5f)
+        font.draw(batch, when {
+            waitingForServer -> "Dang cho server..."
+            !GameState.battleIsPvp -> "Mui ten chon, ENTER xac nhan | S: Ky nang"
+            else -> "Mui ten chon, ENTER/SPACE xac nhan"
+        }, 5f, sh - 5f)
 
         // Floating damage numbers (rise + fade).
         val it = floats.iterator()
@@ -186,6 +204,7 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
         batch.end()
 
         if (pickingItem) drawItemPicker(sw, sh)
+        if (pickingSkill) drawSkillPicker(sw, sh)
     }
 
     private fun drawItemPicker(sw: Float, sh: Float) {
@@ -217,7 +236,14 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     private fun handleInput() {
         if (pickingItem) { handlePicker(); return }
+        if (pickingSkill) { handleSkillPicker(); return }
         if (waitingForServer) return
+        // S opens the skill menu (PvE only; PvP resolves server-side).
+        if (Gdx.input.isKeyJustPressed(Keys.S) && !GameState.battleIsPvp) {
+            if (skills.isEmpty()) GameState.battleLog.add("Chua hoc ky nang nao")
+            else { skillSelected = 0; pickingSkill = true }
+            return
+        }
         if (Gdx.input.isKeyJustPressed(Keys.LEFT))  selectedAction = ((selectedAction - 1 + 4) % 4)
         if (Gdx.input.isKeyJustPressed(Keys.RIGHT)) selectedAction = (selectedAction + 1) % 4
         if (Gdx.input.isKeyJustPressed(Keys.UP))    selectedAction = ((selectedAction - 2 + 4) % 4)
@@ -268,6 +294,49 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
             waitingForServer = true
             pickingItem = false
         }
+    }
+
+    private fun handleSkillPicker() {
+        if (Gdx.input.isKeyJustPressed(Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Keys.BACK)) { pickingSkill = false; return }
+        if (skills.isEmpty()) { pickingSkill = false; return }
+        if (Gdx.input.isKeyJustPressed(Keys.UP)) skillSelected = (skillSelected - 1 + skills.size) % skills.size
+        if (Gdx.input.isKeyJustPressed(Keys.DOWN)) skillSelected = (skillSelected + 1) % skills.size
+        if (Gdx.input.isKeyJustPressed(Keys.ENTER) || Gdx.input.isKeyJustPressed(Keys.SPACE)) {
+            val skill = skills.getOrNull(skillSelected) ?: return
+            val battleId = GameState.currentBattleId ?: return
+            // Action 4 = SKILL; the optional id field carries the skill id.
+            game.tcp.sendBattleAct(battleId, 4, skill.id)
+            waitingForServer = true
+            pickingSkill = false
+            playerAttackTimer = 0.45f
+        }
+    }
+
+    private fun drawSkillPicker(sw: Float, sh: Float) {
+        val rowH = 26f
+        val boxW = sw * 0.7f
+        val boxX = sw * 0.15f
+        val boxTop = sh * 0.62f
+        shapeRenderer.projectionMatrix = hudCam.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Color(0f, 0f, 0f, 0.85f)
+        shapeRenderer.rect(boxX, boxTop - skills.size * rowH - 10f, boxW, skills.size * rowH + 40f)
+        skills.forEachIndexed { i, _ ->
+            if (i == skillSelected) {
+                shapeRenderer.color = Color(0.2f, 0.3f, 0.6f, 1f)
+                shapeRenderer.rect(boxX, boxTop - i * rowH - rowH, boxW, rowH)
+            }
+        }
+        shapeRenderer.end()
+        batch.projectionMatrix = hudCam.combined
+        batch.begin()
+        font.color = Color.WHITE
+        font.draw(batch, "Ky nang (S/ESC dong):", boxX + 8f, boxTop + 24f)
+        skills.forEachIndexed { i, sk ->
+            val y = boxTop - i * rowH
+            font.draw(batch, "${sk.name}  SP:${sk.spCost}  Pow:${if (sk.power == 0) 100 else sk.power}%", boxX + 14f, y - 8f)
+        }
+        batch.end()
     }
 
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {

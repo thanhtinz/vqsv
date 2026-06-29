@@ -33,6 +33,11 @@ data class BattleSession(
     var status: String = "ONGOING",  // ONGOING | WIN | LOSE | RUN | CAUGHT
     val catchable: Boolean = false,
     val mapWildPetId: Int? = null,
+    // Skill / SP state for the player's active pet (SP refills each battle).
+    val playerPetSkillElem: Short = 0,
+    val playerPetLevel: Int = 1,
+    var playerPetSp: Int = 0,
+    var playerPetSpMax: Int = 0,
     // Fixed rewards for TRAINER battles (0 = derive from level, as for wild PVE).
     val enemyExpReward: Int = 0,
     val enemyGoldReward: Int = 0,
@@ -48,7 +53,8 @@ class BattleService(
     private val battleLogRepo: BattleLogRepository,
     private val badgeRepo: BadgeRepository,
     private val playerBadgeRepo: PlayerBadgeRepository,
-    private val npcEnemyTemplateRepo: NpcEnemyTemplateRepository
+    private val npcEnemyTemplateRepo: NpcEnemyTemplateRepository,
+    private val skillService: SkillService
 ) {
     // In-memory battle sessions (can move to Redis for multi-node)
     private val activeBattles = ConcurrentHashMap<String, BattleSession>()
@@ -80,7 +86,11 @@ class BattleService(
             enemyName = template.name,
             playerPetCurrentHp = playerPet.hp,
             catchable = wildPetId != null,
-            mapWildPetId = wildPetId
+            mapWildPetId = wildPetId,
+            playerPetSkillElem = playerPet.template.skillElem,
+            playerPetLevel = playerPet.level.toInt(),
+            playerPetSp = skillService.spMax(playerPet.level.toInt()),
+            playerPetSpMax = skillService.spMax(playerPet.level.toInt())
         )
 
         activeBattles[session.battleId] = session
@@ -121,7 +131,11 @@ class BattleService(
             catchable = false,
             enemyExpReward = trainer.expReward,
             enemyGoldReward = trainer.goldReward,
-            trainerName = trainer.name
+            trainerName = trainer.name,
+            playerPetSkillElem = playerPet.template.skillElem,
+            playerPetLevel = playerPet.level.toInt(),
+            playerPetSp = skillService.spMax(playerPet.level.toInt()),
+            playerPetSpMax = skillService.spMax(playerPet.level.toInt())
         )
 
         activeBattles[session.battleId] = session
@@ -145,54 +159,22 @@ class BattleService(
 
         when (action.action) {
             "ATTACK" -> {
-                // Player attacks first if spd >= enemy spd
-                val playerFirst = playerPet.spd >= session.enemySpd
+                // Basic strike: pet's own element, 100% power, no SP cost.
+                playerStrike(session, playerPet, log, playerPetTemplate.element, 100, "tấn công")
+                    ?.let { return it }
+            }
 
-                if (playerFirst) {
-                    val crit = GameFormula.isCrit(playerPet.spd.toInt())
-                    val mult = GameFormula.elementMult(playerPetTemplate.element, session.enemyElement)
-                    val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit)
-                    session.enemyHp -= dmg
-                    log.add("${playerPet.nickname ?: playerPetTemplate.name} tấn công! Gây ${dmg} sát thương${if (crit) " (Chí mạng!)" else ""}!")
-
-                    if (session.enemyHp <= 0) {
-                        session.status = "WIN"
-                        return finalizeBattle(session, playerPet, log)
-                    }
-
-                    // Enemy counter
-                    val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
-                    val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
-                    session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} phản công! Gây ${eDmg} sát thương!")
-                } else {
-                    // Enemy attacks first
-                    val eMult = GameFormula.elementMult(session.enemyElement, playerPetTemplate.element)
-                    val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
-                    session.playerPetCurrentHp -= eDmg
-                    log.add("${session.enemyName} tấn công trước! Gây ${eDmg} sát thương!")
-
-                    if (session.playerPetCurrentHp <= 0) {
-                        session.status = "LOSE"
-                        return finalizeBattle(session, playerPet, log)
-                    }
-
-                    val crit = GameFormula.isCrit(playerPet.spd.toInt())
-                    val mult = GameFormula.elementMult(playerPetTemplate.element, session.enemyElement)
-                    val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit)
-                    session.enemyHp -= dmg
-                    log.add("${playerPet.nickname ?: playerPetTemplate.name} phản công! Gây ${dmg} sát thương${if (crit) " (Chí mạng!)" else ""}!")
-
-                    if (session.enemyHp <= 0) {
-                        session.status = "WIN"
-                        return finalizeBattle(session, playerPet, log)
-                    }
-                }
-
-                if (session.playerPetCurrentHp <= 0) {
-                    session.status = "LOSE"
-                    return finalizeBattle(session, playerPet, log)
-                }
+            "SKILL" -> {
+                val skillId = action.itemId ?: throw IllegalArgumentException("Thiếu skill")
+                val skill = skillService.usableSkill(session.playerPetSkillElem, session.playerPetLevel, skillId)
+                    ?: throw IllegalArgumentException("Sủng vật chưa học kỹ năng này")
+                if (session.playerPetSp < skill.spCost)
+                    throw IllegalStateException("Không đủ SP để dùng ${skill.name}")
+                session.playerPetSp -= skill.spCost.toInt()
+                val power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
+                val elementName = GameFormula.elementName(skill.element.toInt())
+                playerStrike(session, playerPet, log, elementName, power, "dùng ${skill.name}")
+                    ?.let { return it }
             }
 
             "USE_ITEM" -> {
@@ -298,6 +280,44 @@ class BattleService(
             log = log,
             status = session.status
         )
+    }
+
+    /**
+     * One player action (attack or skill) plus the enemy's counter, resolved in speed
+     * order. [elementName]/[skillPower] let a skill override the pet's element/power.
+     * Returns a finalized result if the battle ended, else null to continue the turn.
+     */
+    private fun playerStrike(
+        session: BattleSession, playerPet: PlayerPet, log: MutableList<String>,
+        elementName: String, skillPower: Int, label: String
+    ): BattleTurnResult? {
+        val tpl = playerPet.template
+        val name = playerPet.nickname ?: tpl.name
+        fun playerHit(prefix: String) {
+            val crit = GameFormula.isCrit(playerPet.spd.toInt())
+            val mult = GameFormula.elementMult(elementName, session.enemyElement)
+            val dmg = GameFormula.calcDamage(playerPet.atk.toInt(), session.enemyDef.toInt(), mult, crit, skillPower)
+            session.enemyHp -= dmg
+            log.add("$name $prefix! Gây $dmg sát thương${if (crit) " (Chí mạng!)" else ""}!")
+        }
+        fun enemyHit(prefix: String) {
+            val eMult = GameFormula.elementMult(session.enemyElement, tpl.element)
+            val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
+            session.playerPetCurrentHp -= eDmg
+            log.add("${session.enemyName} $prefix! Gây $eDmg sát thương!")
+        }
+        if (playerPet.spd >= session.enemySpd) {
+            playerHit(label)
+            if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
+            enemyHit("phản công")
+        } else {
+            enemyHit("tấn công trước")
+            if (session.playerPetCurrentHp <= 0) { session.status = "LOSE"; return finalizeBattle(session, playerPet, log) }
+            playerHit("phản công")
+            if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
+        }
+        if (session.playerPetCurrentHp <= 0) { session.status = "LOSE"; return finalizeBattle(session, playerPet, log) }
+        return null
     }
 
     @Transactional

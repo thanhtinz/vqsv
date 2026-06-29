@@ -259,7 +259,7 @@ class TcpGateway(
             val battleId = buf.readBytes(battleIdLen).toString(Charsets.UTF_8)
             val actionCode = buf.readByte()
             val action = when (actionCode.toInt()) {
-                0 -> "ATTACK"; 1 -> "USE_ITEM"; 2 -> "CATCH"; 3 -> "RUN"
+                0 -> "ATTACK"; 1 -> "USE_ITEM"; 2 -> "CATCH"; 3 -> "RUN"; 4 -> "SKILL"
                 else -> "ATTACK"
             }
             val itemId: Short? = if (buf.readableBytes() >= 2) buf.readShort() else null

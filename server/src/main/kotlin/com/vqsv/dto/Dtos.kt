@@ -62,6 +62,16 @@ data class PetDto(
     val evolveLv: Short?
 )
 
+data class SkillInfoDto(
+    val id: Int,
+    val name: String,
+    val element: Int,
+    val power: Int,
+    val spCost: Int,
+    val requiredLevel: Int,
+    val description: String?
+)
+
 data class BattleStartRequest(
     val targetType: String,
     val targetId: Long

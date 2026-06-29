@@ -92,6 +92,12 @@ class PetController(private val petService: PetService) {
         return ResponseEntity.ok(petService.getPlayerPets(playerId))
     }
 
+    @GetMapping("/{petId}/skills")
+    fun getPetSkills(@PathVariable petId: Long, auth: Authentication): ResponseEntity<List<SkillInfoDto>> {
+        val playerId = auth.principal as Long
+        return ResponseEntity.ok(petService.petSkills(playerId, petId))
+    }
+
     @PostMapping("/{petId}/heal")
     fun healPet(
         @PathVariable petId: Long,

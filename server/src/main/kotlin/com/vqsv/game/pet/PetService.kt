@@ -1,7 +1,9 @@
 package com.vqsv.game.pet
 
 import com.vqsv.dto.PetDto
+import com.vqsv.dto.SkillInfoDto
 import com.vqsv.entity.PlayerPet
+import com.vqsv.game.battle.SkillService
 import com.vqsv.repository.*
 import com.vqsv.util.GameFormula
 import org.springframework.data.repository.findByIdOrNull
@@ -12,10 +14,24 @@ import org.springframework.transaction.annotation.Transactional
 class PetService(
     private val playerPetRepo: PlayerPetRepository,
     private val petTemplateRepo: PetTemplateRepository,
-    private val playerItemRepo: PlayerItemRepository
+    private val playerItemRepo: PlayerItemRepository,
+    private val skillService: SkillService
 ) {
     fun getPlayerPets(playerId: Long): List<PetDto> =
         playerPetRepo.findByPlayerIdOrdered(playerId).map { it.toDto() }
+
+    /** The skills a pet has learned (for the in-battle skill menu). */
+    fun petSkills(playerId: Long, petId: Long): List<SkillInfoDto> {
+        val pet = playerPetRepo.findByIdOrNull(petId)
+            ?: throw IllegalArgumentException("Không tìm thấy sủng vật")
+        if (pet.player.id != playerId) throw SecurityException("Không phải sủng vật của bạn")
+        return skillService.learnedSkills(pet.template.skillElem, pet.level.toInt()).map {
+            SkillInfoDto(
+                it.id.toInt(), it.name, it.element.toInt(), it.power.toInt(),
+                it.spCost.toInt(), it.requiredLevel.toInt(), it.description
+            )
+        }
+    }
 
     @Transactional
     fun healPet(playerId: Long, petId: Long, itemId: Short): PetDto {

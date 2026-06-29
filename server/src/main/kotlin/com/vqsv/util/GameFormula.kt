@@ -70,6 +70,10 @@ object GameFormula {
     )
     private val BEATS = mapOf(0 to 1, 1 to 2, 2 to 3, 3 to 0, 5 to 6, 6 to 4, 4 to 5)
 
+    // Element id (0-6, as stored on skills.element / pet_templates.skill_elem) -> name.
+    private val ELEMENT_NAMES = arrayOf("WOOD", "EARTH", "WATER", "FIRE", "GHOST", "WIND", "ELECTRIC")
+    fun elementName(id: Int): String = ELEMENT_NAMES.getOrElse(id) { "FIRE" }
+
     /** 3.0 super-effective, 0.6 resisted, 1.0 neutral (matches battle.ui 300%/60%/100%). */
     fun elementMult(attackerElement: String, defenderElement: String): Float {
         val a = ELEMENT_ID[attackerElement.uppercase()] ?: return 1.0f
