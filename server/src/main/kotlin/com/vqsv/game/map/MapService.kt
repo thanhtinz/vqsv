@@ -17,7 +17,8 @@ class MapService(
     private val mapRepo: GameMapRepository,
     private val mapWildPetRepo: MapWildPetRepository,
     private val petTemplateRepo: PetTemplateRepository,
-    private val battleService: BattleService
+    private val battleService: BattleService,
+    private val mapWarpRepo: MapWarpRepository
 ) {
     data class MoveResult(
         val newX: Short,
@@ -58,6 +59,13 @@ class MapService(
 
         if (newX < 0 || newX >= map.width || newY < 0 || newY >= map.height)
             return MoveResult(player.posX, player.posY)
+
+        // Warp tile: stepping onto it teleports to another map (no wild encounter that step).
+        val warp = mapWarpRepo.findByFromMap(player.mapId).firstOrNull { it.fromX == newX && it.fromY == newY }
+        if (warp != null) {
+            playerRepo.save(player.copy(mapId = warp.toMap, posX = warp.toX, posY = warp.toY))
+            return MoveResult(warp.toX, warp.toY, warped = true, newMapId = warp.toMap)
+        }
 
         playerRepo.save(player.copy(posX = newX, posY = newY))
 

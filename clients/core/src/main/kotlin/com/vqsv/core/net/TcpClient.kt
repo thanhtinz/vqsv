@@ -181,6 +181,12 @@ class TcpClient {
                 val npcType = readByte()
                 listener?.onNpcDialog(name, dialog, npcType)
             }
+            Op.MAP_CHANGE -> {
+                val mapId = readShort()
+                val x = readByte()
+                val y = readByte()
+                listener?.onMapChange(mapId, x, y)
+            }
             Op.PONG -> {
                 listener?.onPong()
             }

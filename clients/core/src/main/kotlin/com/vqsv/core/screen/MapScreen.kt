@@ -276,6 +276,16 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
 
     override fun onMoveOk(x: Int, y: Int) { GameState.posX = x; GameState.posY = y }
 
+    override fun onMapChange(mapId: Int, x: Int, y: Int) {
+        Gdx.app.postRunnable {
+            GameState.mapId = mapId; GameState.posX = x; GameState.posY = y
+            others.clear()
+            if (GameAssets.available()) tileMap = TileMap.load(mapId)
+            loadNpcs()
+            chatLog.add("Da den ban do moi!")
+        }
+    }
+
     override fun onWildEncounter(x: Int, y: Int, battleId: String, name: String, level: Int, hp: Int, catchable: Boolean, spriteId: Int) {
         GameState.posX = x; GameState.posY = y
         GameState.currentBattleId = battleId

@@ -24,5 +24,6 @@ object Op {
     val PVP_START: Byte   = 0x8A.toByte()
     val ENEMY_SWAP: Byte  = 0x8B.toByte()
     val NPC_DIALOG: Byte  = 0x8C.toByte()
+    val MAP_CHANGE: Byte  = 0x8D.toByte()
     val ERROR: Byte       = 0xFF.toByte()
 }

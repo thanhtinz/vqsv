@@ -53,6 +53,7 @@ object Op {
     const val PVP_START    = 0x8A.toByte()  // [2B bidLen][battleId][2B oppNameLen][oppName][2B myHp][2B oppHp]
     const val ENEMY_SWAP   = 0x8B.toByte()  // trainer summons next enemy: [2B nameLen][name][2B hpMax][2B spriteId]
     const val NPC_DIALOG   = 0x8C.toByte()  // [2B nameLen][name][2B dialogLen][dialog][1B npcType] (0=DIALOG,1=SHOP,2=BATTLE_TRAINER)
+    const val MAP_CHANGE   = 0x8D.toByte()  // warp: [2B mapId][1B x][1B y]
     const val ERROR        = 0xFF.toByte()
 }
 
@@ -196,7 +197,12 @@ class TcpGateway(
             val result = mapService.move(playerId, direction)
             val resp = ctx.alloc().buffer()
 
-            if (result.wildEncounter != null) {
+            if (result.warped) {
+                resp.writeByte(Op.MAP_CHANGE.toInt())
+                resp.writeShort((result.newMapId ?: 1).toInt())
+                resp.writeByte(result.newX.toInt())
+                resp.writeByte(result.newY.toInt())
+            } else if (result.wildEncounter != null) {
                 resp.writeByte(Op.WILD_ENC.toInt())
                 resp.writeByte(result.newX.toInt())
                 resp.writeByte(result.newY.toInt())
