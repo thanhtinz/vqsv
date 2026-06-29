@@ -33,9 +33,11 @@ data class BattleSession(
     var status: String = "ONGOING",  // ONGOING | WIN | LOSE | RUN | CAUGHT
     val catchable: Boolean = false,
     val mapWildPetId: Int? = null,
-    // Skill / SP state for the player's active pet (SP refills each battle).
-    val playerPetSkillElem: Short = 0,
-    val playerPetLevel: Int = 1,
+    // The player's active pet (changes when one faints and the next is sent out).
+    var activePetId: Long = 0,
+    // Skill / SP state for the active pet (refreshed on switch; SP refills each battle).
+    var playerPetSkillElem: Short = 0,
+    var playerPetLevel: Int = 1,
     var playerPetSp: Int = 0,
     var playerPetSpMax: Int = 0,
     // Fixed rewards for TRAINER battles (0 = derive from level, as for wild PVE).
@@ -73,6 +75,7 @@ class BattleService(
         val session = BattleSession(
             playerId = playerId,
             playerPetId = playerPet.id,
+            activePetId = playerPet.id,
             battleType = "PVE",
             enemyTemplateId = templateId,
             enemyLevel = level,
@@ -116,6 +119,7 @@ class BattleService(
         val session = BattleSession(
             playerId = playerId,
             playerPetId = playerPet.id,
+            activePetId = playerPet.id,
             battleType = "TRAINER",
             enemyTemplateId = null,
             enemyLevel = trainer.level,
@@ -152,7 +156,7 @@ class BattleService(
             throw IllegalStateException("Trận đấu đã kết thúc")
 
         val log = mutableListOf<String>()
-        val playerPet = playerPetRepo.findByIdOrNull(session.playerPetId)!!
+        val playerPet = playerPetRepo.findByIdOrNull(session.activePetId)!!
         val playerPetTemplate = playerPet.template
 
         session.turn++
@@ -204,11 +208,6 @@ class BattleService(
                 val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                 session.playerPetCurrentHp -= eDmg
                 log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
-
-                if (session.playerPetCurrentHp <= 0) {
-                    session.status = "LOSE"
-                    return finalizeBattle(session, playerPet, log)
-                }
             }
 
             "CATCH" -> {
@@ -240,11 +239,6 @@ class BattleService(
                     val eDmg = GameFormula.calcDamage(session.enemyAtk.toInt(), playerPet.def.toInt(), eMult)
                     session.playerPetCurrentHp -= eDmg
                     log.add("${session.enemyName} tấn công! Gây ${eDmg} sát thương!")
-
-                    if (session.playerPetCurrentHp <= 0) {
-                        session.status = "LOSE"
-                        return finalizeBattle(session, playerPet, log)
-                    }
                 }
             }
 
@@ -269,8 +263,15 @@ class BattleService(
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
-        // Sync HP back to pet entity each turn
-        playerPetRepo.save(playerPet.copy(hp = session.playerPetCurrentHp.coerceAtLeast(0)))
+        // The active pet fainted this turn -> send out the next party member, or LOSE
+        // if the whole team is down (team battle, like the original).
+        if (session.status == "ONGOING" && session.playerPetCurrentHp <= 0) {
+            sendNextOrLose(session, playerPet, log)?.let { return it }
+        }
+
+        // Sync the current active pet's HP back to the DB.
+        val active = playerPetRepo.findByIdOrNull(session.activePetId)!!
+        playerPetRepo.save(active.copy(hp = session.playerPetCurrentHp.coerceAtLeast(0)))
 
         return BattleTurnResult(
             battleId = session.battleId,
@@ -280,6 +281,30 @@ class BattleService(
             log = log,
             status = session.status
         )
+    }
+
+    /**
+     * The active pet fainted. Persist it at 0 HP and send out the next alive party
+     * member (refreshing skill/SP state). Returns a finalized LOSE result only when
+     * the whole team is down, else null to continue with the new active pet.
+     */
+    private fun sendNextOrLose(session: BattleSession, fainted: PlayerPet, log: MutableList<String>): BattleTurnResult? {
+        playerPetRepo.save(fainted.copy(hp = 0))
+        log.add("${fainted.nickname ?: fainted.template.name} đã gục!")
+        val next = playerPetRepo.findByPlayerIdOrdered(session.playerId)
+            .firstOrNull { it.id != session.activePetId && it.hp > 0 }
+        if (next == null) {
+            session.status = "LOSE"
+            return finalizeBattle(session, fainted, log)
+        }
+        session.activePetId = next.id
+        session.playerPetCurrentHp = next.hp
+        session.playerPetSkillElem = next.template.skillElem
+        session.playerPetLevel = next.level.toInt()
+        session.playerPetSpMax = skillService.spMax(next.level.toInt())
+        session.playerPetSp = session.playerPetSpMax
+        log.add("Tung ${next.nickname ?: next.template.name} ra trận!")
+        return null
     }
 
     /**
@@ -312,11 +337,12 @@ class BattleService(
             enemyHit("phản công")
         } else {
             enemyHit("tấn công trước")
-            if (session.playerPetCurrentHp <= 0) { session.status = "LOSE"; return finalizeBattle(session, playerPet, log) }
-            playerHit("phản công")
-            if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
+            // Player faint is handled centrally (send next pet or LOSE) after the action.
+            if (session.playerPetCurrentHp > 0) {
+                playerHit("phản công")
+                if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
+            }
         }
-        if (session.playerPetCurrentHp <= 0) { session.status = "LOSE"; return finalizeBattle(session, playerPet, log) }
         return null
     }
 
