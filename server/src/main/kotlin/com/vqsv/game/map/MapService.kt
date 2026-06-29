@@ -27,6 +27,17 @@ class MapService(
         val wildEncounter: com.vqsv.game.battle.BattleSession? = null
     )
 
+    /** Mark a player online/offline so REST presence (getMapState) reflects reality. */
+    @Transactional
+    fun setOnline(playerId: Long, online: Boolean) {
+        val p = playerRepo.findByIdOrNull(playerId) ?: return
+        if (p.isOnline != online) playerRepo.save(p.copy(isOnline = online))
+    }
+
+    /** Clear stale online flags at startup (any flag left over from a previous run). */
+    @Transactional
+    fun resetAllOnline() = playerRepo.resetAllOnline()
+
     @Transactional
     fun move(playerId: Long, direction: String): MoveResult {
         val player = playerRepo.findByIdOrNull(playerId)

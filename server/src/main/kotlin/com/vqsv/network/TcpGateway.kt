@@ -98,6 +98,9 @@ class TcpGateway(
             .option(ChannelOption.SO_BACKLOG, 128)
             .childOption(ChannelOption.SO_KEEPALIVE, true)
 
+        // Clear any online flags left over from a previous (possibly crashed) run.
+        runCatching { mapService.resetAllOnline() }
+
         bootstrap.bind(port).addListener { f ->
             if (f.isSuccess) log.info("[OK] J2ME TCP gateway listening on port $port")
             else log.error("[ERR] TCP gateway failed to bind: ${f.cause().message}")
@@ -148,6 +151,7 @@ class TcpGateway(
                 val auth = result.getOrThrow()
                 sessions[ctx.channel().id()] = auth.player.id
                 names[ctx.channel().id()] = auth.player.name
+                runCatching { mapService.setOnline(auth.player.id, true) }
                 val resp = ctx.alloc().buffer()
                 resp.writeByte(Op.AUTH_OK.toInt())
                 val tokenBytes = auth.token.toByteArray()
@@ -451,6 +455,7 @@ class TcpGateway(
             if (pid != null) {
                 playerChannels.remove(pid)
                 pendingChallenges.remove(pid)
+                runCatching { mapService.setOnline(pid, false) }
                 // If in a PvP battle, award the win to the remaining opponent.
                 pvpService.abortFor(pid)?.let { (_, oppId) ->
                     playerChannels[oppId]?.let { sendBattleTurn(it, 1, 0, "VICTORY", "Đối thủ đã thoát.") }

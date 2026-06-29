@@ -53,6 +53,16 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         resize(Gdx.graphics.width, Gdx.graphics.height)
         if (GameAssets.available()) tileMap = TileMap.load(GameState.mapId)
         loadTrainers()
+        // Pull medal (huy chuong) + hp from the REST profile so the HUD can show them
+        // (the TCP auth packet only carries gold/kim tien).
+        if (GameState.token.isNotEmpty()) {
+            game.rest.getMyPlayer(GameState.token) { p, _ ->
+                if (p != null) Gdx.app.postRunnable {
+                    GameState.huyChuong = p.huyChuong
+                    GameState.hp = p.hp; GameState.hpMax = p.hpMax
+                }
+            }
+        }
     }
 
     /** Fetch BATTLE_TRAINER NPCs for the current map so they can be drawn and dueled. */
@@ -114,7 +124,7 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
         batch.begin()
         val h = Gdx.graphics.height.toFloat()
         font.color = Color.WHITE
-        font.draw(batch, "${GameState.playerName} | Lv.${GameState.level} | HP:${GameState.hp}/${GameState.hpMax} | Xu:${GameState.kimTien}", 6f, h - 6f)
+        font.draw(batch, "${GameState.playerName} | Lv.${GameState.level} | HP:${GameState.hp}/${GameState.hpMax} | Xu:${GameState.kimTien} | HC:${GameState.huyChuong}", 6f, h - 6f)
         val onlineHere = others.values.filter { it.mapId == GameState.mapId }
         if (onlineHere.isNotEmpty()) {
             font.color = Color.MAGENTA

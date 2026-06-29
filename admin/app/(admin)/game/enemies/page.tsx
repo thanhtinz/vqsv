@@ -14,6 +14,7 @@ interface Enemy {
   spd: number;
   expReward: number;
   goldReward: number;
+  element: string;
   mapId: number;
 }
 
@@ -47,6 +48,21 @@ export default function EnemiesPage() {
         { name: "atk", label: "ATK", type: "number", defaultValue: 0 },
         { name: "def", label: "DEF", type: "number", defaultValue: 0 },
         { name: "spd", label: "SPD", type: "number", defaultValue: 0 },
+        {
+          name: "element",
+          label: "Hệ",
+          type: "select",
+          defaultValue: "FIRE",
+          options: [
+            { value: "WOOD", label: "Mộc (WOOD)" },
+            { value: "EARTH", label: "Thổ (EARTH)" },
+            { value: "WATER", label: "Thủy (WATER)" },
+            { value: "FIRE", label: "Hỏa (FIRE)" },
+            { value: "GHOST", label: "Quỷ (GHOST)" },
+            { value: "WIND", label: "Phong (WIND)" },
+            { value: "ELECTRIC", label: "Điện (ELECTRIC)" },
+          ],
+        },
         { name: "expReward", label: "EXP thưởng", type: "number", defaultValue: 0 },
         { name: "goldReward", label: "Vàng thưởng", type: "number", defaultValue: 0 },
         { name: "mapId", label: "Bản đồ (mapId)", type: "number", defaultValue: 0 },

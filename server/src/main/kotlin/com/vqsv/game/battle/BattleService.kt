@@ -114,7 +114,7 @@ class BattleService(
             enemyAtk = trainer.atk,
             enemyDef = trainer.def,
             enemySpd = trainer.spd,
-            enemyElement = "FIRE",
+            enemyElement = trainer.element,
             enemySpriteId = trainer.spriteId,
             enemyName = trainer.name,
             playerPetCurrentHp = playerPet.hp,

@@ -6,6 +6,7 @@ object GameState {
     var level: Int = 1
     var exp: Int = 0
     var kimTien: Int = 0
+    var huyChuong: Int = 0
     var mapId: Int = 0
     var posX: Int = 0
     var posY: Int = 0

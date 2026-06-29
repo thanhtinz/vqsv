@@ -69,6 +69,9 @@ data class NpcEnemyTemplate(
     @Column(name = "gold_reward", nullable = false)
     var goldReward: Int = 10,
 
+    @Column(nullable = false, length = 16)
+    var element: String = "FIRE",
+
     @Column(name = "map_id")
     var mapId: Short? = null
 )
