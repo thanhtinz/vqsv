@@ -43,7 +43,12 @@ data class BattleSession(
     // Fixed rewards for TRAINER battles (0 = derive from level, as for wild PVE).
     val enemyExpReward: Int = 0,
     val enemyGoldReward: Int = 0,
-    val trainerName: String = ""
+    val trainerName: String = "",
+    // Enemy team (trainer/boss): ordered template ids + the index now in play. The
+    // enemy*-stat fields hold the CURRENT enemy; an empty party = single enemy.
+    val enemyParty: List<Short> = emptyList(),
+    var enemyIndex: Int = 0,
+    var pendingSwap: com.vqsv.dto.EnemySwapInfo? = null
 )
 
 @Service
@@ -106,9 +111,12 @@ class BattleService(
      * trainer's fixed exp/gold reward on victory.
      */
     @Transactional
-    fun startTrainerBattle(playerId: Long, trainerId: Short): BattleSession {
-        val trainer = npcEnemyTemplateRepo.findByIdOrNull(trainerId)
-            ?: throw IllegalArgumentException("Huấn luyện viên không tồn tại")
+    fun startTrainerBattle(playerId: Long, enemyTemplateIds: List<Short>, trainerName: String): BattleSession {
+        require(enemyTemplateIds.isNotEmpty()) { "Trainer party rỗng" }
+        val team = enemyTemplateIds.map {
+            npcEnemyTemplateRepo.findByIdOrNull(it) ?: throw IllegalArgumentException("Đối thủ không tồn tại")
+        }
+        val first = team.first()
 
         val playerPet = playerPetRepo.findByPlayerIdAndSlot(playerId, 0)
             .orElseThrow { IllegalStateException("Không có sủng vật đang chiến đấu") }
@@ -122,20 +130,23 @@ class BattleService(
             activePetId = playerPet.id,
             battleType = "TRAINER",
             enemyTemplateId = null,
-            enemyLevel = trainer.level,
-            enemyHp = trainer.hp,
-            enemyHpMax = trainer.hp,
-            enemyAtk = trainer.atk,
-            enemyDef = trainer.def,
-            enemySpd = trainer.spd,
-            enemyElement = trainer.element,
-            enemySpriteId = trainer.spriteId,
-            enemyName = trainer.name,
+            enemyLevel = first.level,
+            enemyHp = first.hp,
+            enemyHpMax = first.hp,
+            enemyAtk = first.atk,
+            enemyDef = first.def,
+            enemySpd = first.spd,
+            enemyElement = first.element,
+            enemySpriteId = first.spriteId,
+            enemyName = first.name,
             playerPetCurrentHp = playerPet.hp,
             catchable = false,
-            enemyExpReward = trainer.expReward,
-            enemyGoldReward = trainer.goldReward,
-            trainerName = trainer.name,
+            // Whole-team reward on victory.
+            enemyExpReward = team.sumOf { it.expReward },
+            enemyGoldReward = team.sumOf { it.goldReward },
+            trainerName = trainerName,
+            enemyParty = enemyTemplateIds,
+            enemyIndex = 0,
             playerPetSkillElem = playerPet.template.skillElem,
             playerPetLevel = playerPet.level.toInt(),
             playerPetSp = skillService.spMax(playerPet.level.toInt()),
@@ -285,9 +296,15 @@ class BattleService(
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
-        // The active pet fainted this turn -> send out the next party member, or LOSE
-        // if the whole team is down (team battle, like the original). Reload by
-        // activePetId so a mid-turn SWITCH is handled against the correct pet.
+        // The current enemy fainted -> the trainer summons its next enemy, or WIN if
+        // the whole enemy team is down (team battle, like the original).
+        if (session.status == "ONGOING" && session.enemyHp <= 0) {
+            advanceEnemyOrWin(session, log)?.let { return it }
+        }
+
+        // The active pet fainted -> send out the next party member, or LOSE if the
+        // whole team is down. Reload by activePetId so a mid-turn SWITCH is handled
+        // against the correct pet.
         if (session.status == "ONGOING" && session.playerPetCurrentHp <= 0) {
             val activeNow = playerPetRepo.findByIdOrNull(session.activePetId)!!
             sendNextOrLose(session, activeNow, log)?.let { return it }
@@ -297,14 +314,39 @@ class BattleService(
         val active = playerPetRepo.findByIdOrNull(session.activePetId)!!
         playerPetRepo.save(active.copy(hp = session.playerPetCurrentHp.coerceAtLeast(0)))
 
+        val swap = session.pendingSwap
+        session.pendingSwap = null
         return BattleTurnResult(
             battleId = session.battleId,
             turn = session.turn,
             playerPetHp = session.playerPetCurrentHp.coerceAtLeast(0),
             enemyHp = session.enemyHp.coerceAtLeast(0),
             log = log,
-            status = session.status
+            status = session.status,
+            enemySwap = swap
         )
+    }
+
+    /**
+     * The current enemy fainted. Summon the trainer's next enemy (refreshing the enemy
+     * stats + queueing a swap notice), or finalize a WIN when the whole team is down.
+     */
+    private fun advanceEnemyOrWin(session: BattleSession, log: MutableList<String>): BattleTurnResult? {
+        val nextIdx = session.enemyIndex + 1
+        if (nextIdx >= session.enemyParty.size) {
+            session.status = "WIN"
+            val active = playerPetRepo.findByIdOrNull(session.activePetId)!!
+            return finalizeBattle(session, active, log)
+        }
+        session.enemyIndex = nextIdx
+        val t = npcEnemyTemplateRepo.findByIdOrNull(session.enemyParty[nextIdx])!!
+        session.enemyHp = t.hp; session.enemyHpMax = t.hp
+        session.enemyAtk = t.atk; session.enemyDef = t.def; session.enemySpd = t.spd
+        session.enemyElement = t.element; session.enemySpriteId = t.spriteId
+        session.enemyName = t.name; session.enemyLevel = t.level
+        session.pendingSwap = com.vqsv.dto.EnemySwapInfo(t.name, t.hp, t.spriteId.toInt())
+        log.add("${session.trainerName} tung ${t.name} ra trận!")
+        return null
     }
 
     /**
@@ -355,17 +397,14 @@ class BattleService(
             session.playerPetCurrentHp -= eDmg
             log.add("${session.enemyName} $prefix! Gây $eDmg sát thương!")
         }
+        // Enemy/player faints are handled centrally after the action (advance enemy /
+        // send next pet). A dead enemy simply doesn't get to counter.
         if (playerPet.spd >= session.enemySpd) {
             playerHit(label)
-            if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
-            enemyHit("phản công")
+            if (session.enemyHp > 0) enemyHit("phản công")
         } else {
             enemyHit("tấn công trước")
-            // Player faint is handled centrally (send next pet or LOSE) after the action.
-            if (session.playerPetCurrentHp > 0) {
-                playerHit("phản công")
-                if (session.enemyHp <= 0) { session.status = "WIN"; return finalizeBattle(session, playerPet, log) }
-            }
+            if (session.playerPetCurrentHp > 0) playerHit("phản công")
         }
         return null
     }

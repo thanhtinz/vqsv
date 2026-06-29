@@ -453,6 +453,17 @@ class BattleScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {}
     override fun onPvpInvite(challengerId: Long, name: String) {}
     override fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int) {}
+    override fun onEnemySwap(name: String, hpMax: Int, spriteId: Int) {
+        // Trainer summoned its next enemy: reset the enemy display (name, HP bar, sprite).
+        enemyMaxHp = hpMax.coerceAtLeast(1)
+        enemyHp = hpMax
+        GameState.battleEnemyName = name
+        GameState.battleEnemyHp = hpMax
+        GameState.battleEnemySpriteId = spriteId
+        Gdx.app.postRunnable {
+            if (GameAssets.available() && spriteId >= 0) GameAssets.sprite(spriteId)?.let { enemyAnim = SpriteAnimator(it) }
+        }
+    }
     override fun onPong() {}
     override fun onError(msg: String) {
         waitingForServer = false

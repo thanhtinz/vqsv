@@ -50,6 +50,7 @@ object Op {
     const val PONG         = 0x88.toByte()
     const val PVP_INVITE   = 0x89.toByte()  // [4B challengerId][2B nameLen][name]
     const val PVP_START    = 0x8A.toByte()  // [2B bidLen][battleId][2B oppNameLen][oppName][2B myHp][2B oppHp]
+    const val ENEMY_SWAP   = 0x8B.toByte()  // trainer summons next enemy: [2B nameLen][name][2B hpMax][2B spriteId]
     const val ERROR        = 0xFF.toByte()
 }
 
@@ -61,6 +62,7 @@ class TcpGateway(
     private val battleService: BattleService,
     private val pvpService: com.vqsv.game.battle.PvpService,
     private val npcRepo: com.vqsv.repository.NpcRepository,
+    private val trainerPartyRepo: com.vqsv.repository.TrainerPartyRepository,
     private val jwtUtil: JwtUtil
 ) {
     private val log = LoggerFactory.getLogger(TcpGateway::class.java)
@@ -287,6 +289,18 @@ class TcpGateway(
             resp.writeShort(logText.size)
             resp.writeBytes(logText)
             ctx.write(resp)
+
+            // Trainer summoned its next enemy -> tell the client the new enemy's
+            // name / max HP / sprite so it can update the display.
+            turnResult.enemySwap?.let { swap ->
+                val sn = swap.name.toByteArray(Charsets.UTF_8)
+                val sw = ctx.alloc().buffer()
+                sw.writeByte(Op.ENEMY_SWAP.toInt())
+                sw.writeShort(sn.size); sw.writeBytes(sn)
+                sw.writeShort(swap.hpMax)
+                sw.writeShort(swap.spriteId)
+                ctx.write(sw)
+            }
         }
 
         // ---- PvP ----
@@ -343,10 +357,12 @@ class TcpGateway(
             if (npc == null) { sendError(ctx, "Không có huấn luyện viên ở gần đây"); return }
             if (!adjacent(npc)) { sendError(ctx, "Hãy đến gần huấn luyện viên trước"); return }
 
-            val templateId = npc.enemyTemplateId
-                ?: run { sendError(ctx, "Huấn luyện viên này chưa sẵn sàng"); return }
+            // The trainer's full team (ordered); fall back to its single linked enemy.
+            val party = trainerPartyRepo.findByNpcIdOrderBySlotAsc(npc.id).map { it.enemyTemplateId }
+                .ifEmpty { listOfNotNull(npc.enemyTemplateId) }
+            if (party.isEmpty()) { sendError(ctx, "Huấn luyện viên này chưa sẵn sàng"); return }
 
-            val session = battleService.startTrainerBattle(playerId, templateId)
+            val session = battleService.startTrainerBattle(playerId, party, npc.name)
 
             // Reuse the wild-encounter frame; catchable = 0 marks it as a duel.
             val resp = ctx.alloc().buffer()

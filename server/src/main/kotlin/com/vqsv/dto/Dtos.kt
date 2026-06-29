@@ -90,8 +90,12 @@ data class BattleTurnResult(
     val playerPetHp: Int,
     val enemyHp: Int,
     val log: List<String>,
-    val status: String
+    val status: String,
+    // Non-null when a trainer/boss summoned its next enemy this turn (team battle).
+    val enemySwap: EnemySwapInfo? = null
 )
+
+data class EnemySwapInfo(val name: String, val hpMax: Int, val spriteId: Int)
 
 data class MoveRequest(
     val direction: String

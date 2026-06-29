@@ -101,3 +101,20 @@ data class MapWarp(
     @Column(name = "to_y", nullable = false)
     var toY: Short = 0
 )
+
+// Trainer party: a BATTLE_TRAINER npc's ordered team of enemy templates.
+@Entity
+@Table(name = "trainer_party")
+data class TrainerPartyMember(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Int = 0,
+
+    @Column(name = "npc_id", nullable = false)
+    var npcId: Short = 0,
+
+    @Column(name = "enemy_template_id", nullable = false)
+    var enemyTemplateId: Short = 0,
+
+    @Column(nullable = false)
+    var slot: Short = 0
+)

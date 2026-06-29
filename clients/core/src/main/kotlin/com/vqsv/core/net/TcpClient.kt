@@ -166,6 +166,13 @@ class TcpClient {
                 val oppSpriteId = readShort()
                 listener?.onPvpStart(battleId, oppName, myHp, oppHp, oppSpriteId)
             }
+            Op.ENEMY_SWAP -> {
+                val nameLen = readShort()
+                val name = readStr(nameLen)
+                val hpMax = readShort()
+                val spriteId = readShort()
+                listener?.onEnemySwap(name, hpMax, spriteId)
+            }
             Op.PONG -> {
                 listener?.onPong()
             }

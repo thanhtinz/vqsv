@@ -244,6 +244,7 @@ class MapScreen(private val game: VqsvGame) : Screen, PacketListener {
             game.setScreen(BattleScreen(game))
         }
     }
+    override fun onEnemySwap(name: String, hpMax: Int, spriteId: Int) {}
     override fun onPong() {}
     override fun onError(msg: String) {}
 

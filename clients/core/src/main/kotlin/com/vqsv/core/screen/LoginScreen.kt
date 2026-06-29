@@ -163,6 +163,7 @@ class LoginScreen(private val game: VqsvGame) : Screen, PacketListener {
     override fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String) {}
     override fun onPvpInvite(challengerId: Long, name: String) {}
     override fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int) {}
+    override fun onEnemySwap(name: String, hpMax: Int, spriteId: Int) {}
     override fun onBattleTurn(playerHp: Int, enemyHp: Int, status: String, log: String) {}
     override fun onPong() {}
 

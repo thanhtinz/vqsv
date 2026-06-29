@@ -118,4 +118,49 @@ class BattlePartyTest {
         assertTrue(result.log.any { it.contains("Đổi sang") }, "the swap should be reported")
         assertTrue(result.playerPetHp in 90..100, "the new active pet took only the free hit")
     }
+
+    private fun enemy(hp: Int, name: String): com.vqsv.entity.NpcEnemyTemplate {
+        val e = mock(com.vqsv.entity.NpcEnemyTemplate::class.java)
+        `when`(e.hp).thenReturn(hp)
+        `when`(e.atk).thenReturn(1); `when`(e.def).thenReturn(0); `when`(e.spd).thenReturn(1)
+        `when`(e.element).thenReturn("FIRE"); `when`(e.spriteId).thenReturn(2)
+        `when`(e.name).thenReturn(name); `when`(e.level).thenReturn(5)
+        `when`(e.expReward).thenReturn(100); `when`(e.goldReward).thenReturn(50)
+        return e
+    }
+
+    @Test
+    fun `a trainer summons its next enemy when one falls`() {
+        val petRepo = mock(PlayerPetRepository::class.java)
+        val enemyRepo = mock(NpcEnemyTemplateRepository::class.java)
+        val skillRepo = mock(SkillRepository::class.java)
+        `when`(skillRepo.findByElement(0)).thenReturn(emptyList())
+        val skillService = SkillService(skillRepo)
+
+        // A strong, fast pet that one-shots a 1-HP enemy.
+        val hero = pet(1L, 0, 100, "Hero")
+        `when`(hero.atk).thenReturn(500); `when`(hero.spd).thenReturn(500)
+        `when`(petRepo.findByPlayerIdAndSlot(100L, 0)).thenReturn(Optional.of(hero))
+        `when`(petRepo.findById(1L)).thenReturn(Optional.of(hero))
+        `when`(petRepo.findByPlayerIdOrdered(100L)).thenReturn(listOf(hero))
+        `when`(petRepo.save(any(PlayerPet::class.java))).thenAnswer { it.getArgument(0) }
+
+        val e1 = enemy(1, "Mob1"); val e2 = enemy(1, "Mob2")
+        `when`(enemyRepo.findById(1.toShort())).thenReturn(Optional.of(e1))
+        `when`(enemyRepo.findById(2.toShort())).thenReturn(Optional.of(e2))
+
+        val svc = BattleService(
+            mock(PlayerRepository::class.java), petRepo, mock(PetTemplateRepository::class.java),
+            mock(PlayerItemRepository::class.java), mock(BattleLogRepository::class.java),
+            mock(BadgeRepository::class.java), mock(PlayerBadgeRepository::class.java),
+            enemyRepo, skillService
+        )
+        val session = svc.startTrainerBattle(100L, listOf(1, 2), "HLV")
+
+        val result = svc.processTurn(100L, BattleAction(session.battleId, "ATTACK"))
+
+        assertEquals("ONGOING", result.status, "killing the first enemy should not end the fight")
+        assertTrue(result.enemySwap != null, "the next enemy must be announced")
+        assertEquals("Mob2", result.enemySwap?.name)
+    }
 }

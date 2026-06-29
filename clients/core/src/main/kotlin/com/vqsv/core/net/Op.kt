@@ -21,5 +21,6 @@ object Op {
     val PONG: Byte        = 0x88.toByte()
     val PVP_INVITE: Byte  = 0x89.toByte()
     val PVP_START: Byte   = 0x8A.toByte()
+    val ENEMY_SWAP: Byte  = 0x8B.toByte()
     val ERROR: Byte       = 0xFF.toByte()
 }

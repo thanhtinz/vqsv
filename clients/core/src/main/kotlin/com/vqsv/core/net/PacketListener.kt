@@ -9,6 +9,7 @@ interface PacketListener {
     fun onPlayerNear(playerId: Long, present: Boolean, mapId: Int, x: Int, y: Int, name: String)
     fun onPvpInvite(challengerId: Long, name: String)
     fun onPvpStart(battleId: String, oppName: String, myHp: Int, oppHp: Int, oppSpriteId: Int)
+    fun onEnemySwap(name: String, hpMax: Int, spriteId: Int)
     fun onError(msg: String)
     fun onPong()
 }

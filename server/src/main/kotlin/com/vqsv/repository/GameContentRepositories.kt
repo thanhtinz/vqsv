@@ -4,6 +4,7 @@ import com.vqsv.entity.MapWarp
 import com.vqsv.entity.Npc
 import com.vqsv.entity.NpcEnemyTemplate
 import com.vqsv.entity.Skill
+import com.vqsv.entity.TrainerPartyMember
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 
@@ -25,4 +26,9 @@ interface MapWarpRepository : JpaRepository<MapWarp, Int> {
 @Repository
 interface SkillRepository : JpaRepository<Skill, Short> {
     fun findByElement(element: Short): List<Skill>
+}
+
+@Repository
+interface TrainerPartyRepository : JpaRepository<TrainerPartyMember, Int> {
+    fun findByNpcIdOrderBySlotAsc(npcId: Short): List<TrainerPartyMember>
 }
