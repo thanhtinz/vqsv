@@ -27,7 +27,8 @@ class PvpService(
         val element: String, val spriteId: Short,
         val skillElem: Short, val level: Int,
         var sp: Int, val spMax: Int,
-        var action: Int = -1, var skillId: Short = -1
+        var action: Int = -1, var skillId: Short = -1,
+        val statuses: MutableList<StatusEffect> = mutableListOf()
     )
 
     class Session(val battleId: String, val a: Combatant, val b: Combatant, var status: String = "ONGOING")
@@ -96,12 +97,14 @@ class PvpService(
             // A skill overrides element + power when known and SP allows; else basic hit.
             var power = 100
             var elementName = atk.element
+            var burns = false
             if (atk.action == 4) {
                 val skill = skillService.usableSkill(atk.skillElem, atk.level, atk.skillId)
                 if (skill != null && atk.sp >= skill.spCost) {
                     atk.sp -= skill.spCost.toInt()
                     power = if (skill.power.toInt() == 0) 100 else skill.power.toInt()
                     elementName = GameFormula.elementName(skill.element.toInt())
+                    burns = StatusEffects.isBurnSkill(skill.behaviorFlag.toInt(), skill.effectId?.toInt())
                     log.add("${atk.name} dùng ${skill.name}!")
                 }
             }
@@ -110,6 +113,12 @@ class PvpService(
             def.hp -= dmg
             log.add("${atk.name} đánh ${def.name}: $dmg sát thương${if (crit) " (Chí mạng!)" else ""}")
             if (def.hp <= 0) { log.add("${def.name} đã gục!"); break }
+            if (burns) { StatusEffects.applyBurn(def.statuses, atk.atk); log.add("${def.name} bị Đốt Cháy!") }
+        }
+        // Damage-over-time resolves at the end of the round, faster combatant first.
+        for (c in listOf(s.a, s.b).sortedByDescending { it.spd }) {
+            if (c.hp <= 0) continue
+            c.hp -= StatusEffects.tick(c.statuses, c.name, log)
         }
         s.a.action = -1; s.b.action = -1
         s.a.skillId = -1; s.b.skillId = -1

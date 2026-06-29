@@ -106,6 +106,25 @@ class PvpServiceTest {
     }
 
     @Test
+    fun `a burn skill sets the opponent on fire and ticks each round`() {
+        // behavior_flag = 2, effect_id = 0 -> BURN; power 0 so it's a low/basic hit.
+        val burn = Skill(id = 0, name = "Dương Viêm", element = 0, requiredLevel = 1, spCost = 10,
+            power = 0, effectId = 0, behaviorFlag = 2)
+        // Huge HP so nobody faints; A is faster so it lands the burn first.
+        val svc = serviceWith(pet(5000, 40, 10, 9), pet(5000, 40, 10, 5), skills = listOf(burn))
+        val s = svc.start(1L, "A", 2L, "B")!!
+        svc.submitAction(s.battleId, 1L, 4, 0)        // A burns B
+        val r1 = svc.submitAction(s.battleId, 2L, 0)!!
+        assertTrue(r1.log.any { it.contains("bị Đốt Cháy") }, "burn is applied")
+        assertTrue(r1.log.any { it.contains("bị thiêu đốt") }, "burn ticks the same round")
+
+        // A plain follow-up round still ticks the lingering burn on B.
+        svc.submitAction(s.battleId, 1L, 0)
+        val r2 = svc.submitAction(s.battleId, 2L, 0)!!
+        assertTrue(r2.log.any { it.contains("B bị thiêu đốt") }, "burn keeps ticking next round")
+    }
+
+    @Test
     fun `forfeit resolves immediately as a loss for the quitter`() {
         val svc = serviceWith(pet(200, 20, 5, 5), pet(200, 20, 5, 5))
         val s = svc.start(1L, "A", 2L, "B")!!

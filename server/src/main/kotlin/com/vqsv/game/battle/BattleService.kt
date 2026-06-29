@@ -48,7 +48,9 @@ data class BattleSession(
     // enemy*-stat fields hold the CURRENT enemy; an empty party = single enemy.
     val enemyParty: List<Short> = emptyList(),
     var enemyIndex: Int = 0,
-    var pendingSwap: com.vqsv.dto.EnemySwapInfo? = null
+    var pendingSwap: com.vqsv.dto.EnemySwapInfo? = null,
+    // Active status effects on the current enemy (e.g. BURN from the player's skills).
+    val enemyStatuses: MutableList<StatusEffect> = mutableListOf()
 )
 
 @Service
@@ -193,6 +195,11 @@ class BattleService(
                 val elementName = GameFormula.elementName(skill.element.toInt())
                 playerStrike(session, playerPet, log, elementName, power, "dùng ${skill.name}")
                     ?.let { return it }
+                // A burning skill leaves the enemy on fire for several turns.
+                if (session.enemyHp > 0 && StatusEffects.isBurnSkill(skill.behaviorFlag.toInt(), skill.effectId?.toInt())) {
+                    StatusEffects.applyBurn(session.enemyStatuses, playerPet.atk.toInt())
+                    log.add("${session.enemyName} bị Đốt Cháy!")
+                }
             }
 
             "USE_ITEM" -> {
@@ -299,6 +306,11 @@ class BattleService(
             else -> throw IllegalArgumentException("Hành động không hợp lệ")
         }
 
+        // Damage-over-time (BURN etc.) resolves at the end of the turn.
+        if (session.status == "ONGOING" && session.enemyHp > 0) {
+            session.enemyHp -= StatusEffects.tick(session.enemyStatuses, session.enemyName, log)
+        }
+
         // The current enemy fainted -> the trainer summons its next enemy, or WIN if
         // the whole enemy team is down (team battle, like the original).
         if (session.status == "ONGOING" && session.enemyHp <= 0) {
@@ -347,6 +359,7 @@ class BattleService(
         session.enemyAtk = t.atk; session.enemyDef = t.def; session.enemySpd = t.spd
         session.enemyElement = t.element; session.enemySpriteId = t.spriteId
         session.enemyName = t.name; session.enemyLevel = t.level
+        session.enemyStatuses.clear()   // a fresh enemy starts with no statuses
         session.pendingSwap = com.vqsv.dto.EnemySwapInfo(t.name, t.hp, t.spriteId.toInt())
         log.add("${session.trainerName} tung ${t.name} ra trận!")
         return null
